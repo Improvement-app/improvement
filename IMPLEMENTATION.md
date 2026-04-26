@@ -6,7 +6,7 @@ Last updated: April 26, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", manual YouTube and HPAcademy transcript capture, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, captured transcript review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, captured transcript review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -19,6 +19,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Webpage text selection capture with floating "Send to AI" button.
 - Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages, using a normal desktop Chrome user agent for embedded tabs, broadened transcript-panel selectors, a short wait for YouTube's dynamic rendering, and a visible-text fallback for timestamped transcript lines.
 - Manual HPAcademy transcript capture via the same browser toolbar button on HPAcademy video-like pages, reading from the visible transcript window.
+- Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube and HPAcademy extractors, and a registry/factory for selecting the right extractor by URL.
 - Transcript success/unavailable notices, captured transcript history for the current session, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
@@ -29,7 +30,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Vitest + Testing Library setup for renderer workflow tests.
 - Tests covering tab interactions, "Send to AI" capture routing, note saving, learning-cell prompt starters, and formatted/copyable mentor responses.
 - Tests covering tab persistence serialization, file read/write, active-tab restoration data, and corrupted/missing state handling.
-- Tests covering YouTube and HPAcademy video URL detection, manual transcript extraction script generation, transcript capture UI, one-click Grok sending, and unavailable transcript messaging.
+- Tests covering YouTube and HPAcademy extractor URL detection, transcript registry selection, manual transcript extraction script generation, transcript capture UI, one-click Grok sending, and unavailable transcript messaging.
 - Electron dev launcher that removes `ELECTRON_RUN_AS_NODE` before running `electron-vite`.
 
 ## Current Limitations
@@ -67,6 +68,7 @@ Tests are now required for new features when appropriate, especially renderer wo
 - Add real visualizer generation and saved learning artifacts.
 - Add full browser history/session persistence across app restarts.
 - Add alternate caption-source capture for YouTube videos when DOM transcript extraction is unavailable.
+- Add additional transcript extractor providers for sites such as Coursera or LinkedIn Learning through the `src/main/transcript/` registry.
 - Add task/schedule editing and local persistence.
 - Add broader test coverage for main-process tab management, New Tab page generation, and preload capture behavior.
 - Prepare packaging for macOS, Windows, and Linux.

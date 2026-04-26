@@ -13,14 +13,13 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import { createHPAcademyTranscriptScript, isHPAcademyVideoUrl, type HPAcademyTranscriptResult } from './hpAcademyTranscript'
 import {
   createPersistedTabState,
   readPersistedTabState,
   writePersistedTabState,
   type PersistedTabState
 } from './tabPersistence'
-import { createYouTubeTranscriptScript, isYouTubeWatchUrl, type YouTubeTranscriptResult } from './youtubeTranscript'
+import { getTranscriptExtractor } from './transcript'
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -293,54 +292,27 @@ function broadcastTabs(): TabsSnapshot {
   return snapshot
 }
 
-function createTranscriptCaptureEvent(result: YouTubeTranscriptResult | HPAcademyTranscriptResult): TranscriptCaptureEvent {
-  const capturedAt = new Date().toISOString()
-
-  if (result.ok) {
-    return {
-      type: 'captured',
-      capturedAt,
-      capture: {
-        title: result.title,
-        url: result.url,
-        text: result.text
-      }
-    }
-  }
-
-  return {
-    type: 'unavailable',
-    capturedAt,
-    title: result.title,
-    url: result.url,
-    reason: result.reason
-  }
-}
-
 async function captureActiveTranscript(): Promise<TranscriptCaptureEvent> {
   const tab = activeTabId ? tabs.get(activeTabId) : null
+  const extractor = tab ? getTranscriptExtractor(tab.url) : null
 
-  if (!tab || (!isYouTubeWatchUrl(tab.url) && !isHPAcademyVideoUrl(tab.url))) {
-    return createTranscriptCaptureEvent({
-      ok: false,
+  if (!tab || !extractor) {
+    return {
+      type: 'unavailable',
+      capturedAt: new Date().toISOString(),
       title: tab?.title || 'Current page',
       url: tab?.url || '',
       reason: 'Open a supported video page before capturing a transcript.'
-    })
+    }
   }
 
-  try {
-    const script = isHPAcademyVideoUrl(tab.url) ? createHPAcademyTranscriptScript() : createYouTubeTranscriptScript()
-    const result = (await tab.view.webContents.executeJavaScript(script, true)) as YouTubeTranscriptResult | HPAcademyTranscriptResult
-    return createTranscriptCaptureEvent(result)
-  } catch (error) {
-    return createTranscriptCaptureEvent({
-      ok: false,
-      title: tab.title || 'Video',
-      url: tab.url,
-      reason: error instanceof Error ? error.message : 'Unable to capture the transcript.'
-    })
-  }
+  const result = await extractor.extractTranscript({
+    webContents: tab.view.webContents,
+    fallbackTitle: tab.title,
+    url: tab.url
+  })
+
+  return extractor.createWorkspaceEvent(result)
 }
 
 async function saveCurrentTabs(): Promise<void> {
@@ -583,18 +555,14 @@ function sendMentorEvent(event: MentorStreamEvent): void {
 }
 
 function buildCapturePrompt(capture: CapturedSelection): string {
-  const isYouTubeTranscript =
-    isYouTubeWatchUrl(capture.url) &&
-    (capture.text.startsWith('Video transcript captured manually.') ||
-      capture.text.startsWith('YouTube transcript captured manually.') ||
-      capture.text.startsWith('YouTube transcript captured automatically.'))
-  const isHPAcademyTranscript =
-    isHPAcademyVideoUrl(capture.url) &&
-    (capture.text.startsWith('Video transcript captured manually.') || capture.text.startsWith('HPAcademy transcript captured manually.'))
+  const transcriptExtractor = getTranscriptExtractor(capture.url)
+  const isTranscriptCapture =
+    Boolean(transcriptExtractor) &&
+    /^(Video|YouTube|HPAcademy) transcript captured (manually|automatically)\.\n\n/.test(capture.text)
 
-  if (isYouTubeTranscript || isHPAcademyTranscript) {
+  if (isTranscriptCapture) {
     return [
-      `The learner watched a ${isHPAcademyTranscript ? 'HPAcademy' : 'YouTube'} video and captured the transcript in Improvement.`,
+      `The learner watched a ${transcriptExtractor?.label ?? 'video'} and captured the transcript in Improvement.`,
       '',
       `Video title: ${capture.title || 'Untitled video'}`,
       `URL: ${capture.url}`,
