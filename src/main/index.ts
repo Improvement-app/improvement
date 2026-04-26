@@ -13,6 +13,7 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
+import { ResourceRepository } from './resources/ResourceRepository'
 import {
   createPersistedTabState,
   readPersistedTabState,
@@ -48,6 +49,7 @@ let temporaryXaiApiKey: string | null = null
 let mentorBusy = false
 let isQuitting = false
 let hasSavedTabsForQuit = false
+let resourceRepository: ResourceRepository | null = null
 const tabs = new Map<TabId, ManagedTab>()
 
 interface XaiChatMessage {
@@ -311,6 +313,12 @@ async function captureActiveTranscript(): Promise<TranscriptCaptureEvent> {
     fallbackTitle: tab.title,
     url: tab.url
   })
+
+  const resource = extractor.createResource(result)
+
+  if (resource) {
+    await resourceRepository?.save(resource)
+  }
 
   return extractor.createWorkspaceEvent(result)
 }
@@ -755,6 +763,7 @@ function createMainWindow(): void {
 
 app.whenReady().then(() => {
   configureBrowserSession()
+  resourceRepository = new ResourceRepository(app.getPath('userData'))
 
   ipcMain.handle(ipcChannels.createTab, (_event, url?: string) => createTab(url))
   ipcMain.handle(ipcChannels.closeTab, (_event, tabId: TabId) => closeTab(tabId))
@@ -783,6 +792,11 @@ app.whenReady().then(() => {
     return getSnapshot()
   })
   ipcMain.handle(ipcChannels.getXaiStatus, () => getXaiStatus())
+  ipcMain.handle(ipcChannels.getCapturedResources, async () => resourceRepository?.getAll() ?? [])
+  ipcMain.handle(ipcChannels.searchCapturedResources, async (_event, query: string) => resourceRepository?.search(query) ?? [])
+  ipcMain.handle(ipcChannels.deleteCapturedResource, async (_event, id: string) => {
+    await resourceRepository?.delete(id)
+  })
   ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {
     const trimmed = apiKey.trim()
     temporaryXaiApiKey = trimmed.length > 0 ? trimmed : null
@@ -831,6 +845,11 @@ app.whenReady().then(() => {
         hasSavedTabsForQuit = true
         app.quit()
       })
+  })
+
+  app.on('will-quit', () => {
+    resourceRepository?.close()
+    resourceRepository = null
   })
 
   app.on('activate', () => {

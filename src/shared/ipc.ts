@@ -1,3 +1,5 @@
+import type { CapturedResource } from './resources'
+
 export type TabId = string
 
 export interface BrowserBounds {
@@ -75,6 +77,9 @@ export interface RendererApi {
   goForward: () => Promise<TabsSnapshot>
   reload: () => Promise<TabsSnapshot>
   setBrowserBounds: (bounds: BrowserBounds) => void
+  getCapturedResources: () => Promise<CapturedResource[]>
+  searchCapturedResources: (query: string) => Promise<CapturedResource[]>
+  deleteCapturedResource: (id: string) => Promise<void>
   getXaiStatus: () => Promise<XaiStatus>
   setTemporaryXaiApiKey: (apiKey: string) => Promise<XaiStatus>
   captureTranscript: () => Promise<TranscriptCaptureEvent>
@@ -95,6 +100,9 @@ export const ipcChannels = {
   goForward: 'browser:go-forward',
   reload: 'browser:reload',
   setBrowserBounds: 'browser:set-bounds',
+  getCapturedResources: 'resources:get-all',
+  searchCapturedResources: 'resources:search',
+  deleteCapturedResource: 'resources:delete',
   tabsChanged: 'tabs:changed',
   selectionCaptured: 'selection:captured',
   browserSelection: 'browser:selection',

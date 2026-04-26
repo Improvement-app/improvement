@@ -1,6 +1,7 @@
 import type { FormEvent, ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BrowserTab, CapturedSelection, MentorMessage, TabsSnapshot, TranscriptCaptureEvent, XaiStatus } from '../../shared/ipc'
+import type { CapturedResource } from '../../shared/resources'
 
 const initialSnapshot: TabsSnapshot = {
   tabs: [],
@@ -66,6 +67,38 @@ function formatSavedTime(value: string | null): string {
   }).format(new Date(value))}`
 }
 
+function formatResourceDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(new Date(value))
+}
+
+function resourceIcon(type: string): string {
+  if (type === 'transcript') return 'T'
+  if (type === 'pdf') return 'P'
+  if (type === 'article') return 'A'
+  if (type === 'textbook') return 'B'
+  if (type === 'note') return 'N'
+  return 'R'
+}
+
+function resourceFromTranscriptEvent(event: Extract<TranscriptCaptureEvent, { type: 'captured' }>): CapturedResource {
+  return {
+    id: crypto.randomUUID(),
+    type: 'transcript',
+    source: formatHostname(event.capture.url),
+    title: event.capture.title || 'Video transcript',
+    url: event.capture.url,
+    content: event.capture.text,
+    capturedAt: event.capturedAt,
+    metadata: { capturedFrom: 'manual-transcript-capture' },
+    tags: ['transcript']
+  }
+}
+
 function FormattedMentorContent({ content }: { content: string }): ReactElement {
   const blocks = content
     .split(/\n{2,}/)
@@ -117,16 +150,22 @@ export default function App(): ReactElement {
   const [lastSavedAt, setLastSavedAt] = useState(() => window.localStorage.getItem('improvement.notesSavedAt'))
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [transcriptNotice, setTranscriptNotice] = useState<TranscriptCaptureEvent | null>(null)
-  const [capturedTranscripts, setCapturedTranscripts] = useState<CapturedSelection[]>([])
+  const [capturedResources, setCapturedResources] = useState<CapturedResource[]>([])
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
   const canCaptureTranscript = Boolean(activeTab && (isYouTubeWatchPage(activeTab.url) || isHPAcademyVideoPage(activeTab.url)))
+  const selectedResource = useMemo(
+    () => capturedResources.find((resource) => resource.id === selectedResourceId) ?? capturedResources[0] ?? null,
+    [capturedResources, selectedResourceId]
+  )
 
   useEffect(() => {
     window.improvement.getXaiStatus().then(setXaiStatus).catch(() => {
       setMentorError('Unable to read xAI API key status from the main process.')
     })
+    void loadCapturedResources()
 
     const disposeTabs = window.improvement.onTabsChanged((nextSnapshot) => {
       setSnapshot(nextSnapshot)
@@ -182,6 +221,23 @@ export default function App(): ReactElement {
       disposeMentorStream()
     }
   }, [])
+
+  const loadCapturedResources = async (fallback?: CapturedResource): Promise<void> => {
+    try {
+      const resources = await window.improvement.getCapturedResources()
+      const nextResources = resources.length > 0 || !fallback ? resources : [fallback]
+      setCapturedResources(nextResources)
+      setSelectedResourceId((currentId) =>
+        currentId && nextResources.some((resource) => resource.id === currentId) ? currentId : nextResources[0]?.id ?? null
+      )
+    } catch {
+      if (fallback) {
+        setCapturedResources((resources) => [fallback, ...resources])
+        setSelectedResourceId(fallback.id)
+      }
+      setMentorError('Unable to load saved learning resources.')
+    }
+  }
 
   useEffect(() => {
     const frame = browserFrameRef.current
@@ -251,7 +307,8 @@ export default function App(): ReactElement {
 
     if (event.type === 'captured') {
       setMentorError(null)
-      setCapturedTranscripts((transcripts) => [event.capture, ...transcripts])
+      const fallbackResource = resourceFromTranscriptEvent(event)
+      await loadCapturedResources(fallbackResource)
       return
     }
 
@@ -279,11 +336,20 @@ export default function App(): ReactElement {
     }
   }
 
-  const sendTranscriptToGrok = async (transcript: CapturedSelection): Promise<void> => {
+  const sendResourceToGrok = async (resource: CapturedResource): Promise<void> => {
     await sendCaptureToMentor({
-      ...transcript,
-      text: `Video transcript captured manually.\n\n${transcript.text}`
+      title: resource.title,
+      url: resource.url ?? '',
+      text:
+        resource.type === 'transcript'
+          ? `Video transcript captured manually.\n\n${resource.content}`
+          : `Captured ${resource.type} resource from ${resource.source}.\n\n${resource.content}`
     })
+  }
+
+  const deleteResource = async (resourceId: string): Promise<void> => {
+    await window.improvement.deleteCapturedResource(resourceId)
+    await loadCapturedResources()
   }
 
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
@@ -495,30 +561,51 @@ export default function App(): ReactElement {
                 </section>
               )}
 
-              {capturedTranscripts.length > 0 && (
-                <section className="captured-transcripts-card">
+              {capturedResources.length > 0 && (
+                <section className="captured-transcripts-card resource-library-card">
                   <div className="card-header">
                     <div>
-                      <h3>Captured transcripts</h3>
-                      <span>{capturedTranscripts.length} saved this session</span>
+                      <h3>Captured resources</h3>
+                      <span>{capturedResources.length} saved locally</span>
                     </div>
                   </div>
-                  <div className="captured-transcript-list">
-                    {capturedTranscripts.map((transcript, index) => (
-                      <article key={`${transcript.url}-${index}`} className="captured-transcript">
-                        <div className="message-header">
-                          <div>
-                            <strong>{transcript.title || 'Video transcript'}</strong>
-                            <span>{formatHostname(transcript.url)}</span>
-                          </div>
-                          <button type="button" onClick={() => void sendTranscriptToGrok(transcript)}>
-                            Send to Grok
-                          </button>
-                        </div>
-                        <pre>{transcript.text}</pre>
-                      </article>
+                  <div className="resource-list">
+                    {capturedResources.map((resource) => (
+                      <button
+                        type="button"
+                        key={resource.id}
+                        className={selectedResource?.id === resource.id ? 'resource-row active' : 'resource-row'}
+                        onClick={() => setSelectedResourceId(resource.id)}
+                      >
+                        <span className="resource-icon">{resourceIcon(resource.type)}</span>
+                        <span>
+                          <strong>{resource.title || 'Captured resource'}</strong>
+                          <small>
+                            {resource.type} · {resource.source} · {formatResourceDate(resource.capturedAt)}
+                          </small>
+                        </span>
+                      </button>
                     ))}
                   </div>
+                  {selectedResource && (
+                    <article className="captured-transcript resource-preview">
+                      <div className="message-header">
+                        <div>
+                          <strong>{selectedResource.title || 'Captured resource'}</strong>
+                          <span>{selectedResource.url ? formatHostname(selectedResource.url) : selectedResource.source}</span>
+                        </div>
+                        <div className="resource-actions">
+                          <button type="button" onClick={() => void sendResourceToGrok(selectedResource)}>
+                            Send to Grok
+                          </button>
+                          <button type="button" onClick={() => void deleteResource(selectedResource.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <pre>{selectedResource.content}</pre>
+                    </article>
+                  )}
                 </section>
               )}
 

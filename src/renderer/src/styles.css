@@ -373,6 +373,73 @@ h3 {
   gap: 10px;
 }
 
+.resource-library-card {
+  gap: 12px;
+}
+
+.resource-list {
+  display: grid;
+  gap: 8px;
+}
+
+.resource-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e3e8f2;
+  border-radius: 13px;
+  background: #fbfdff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resource-row.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.resource-row strong,
+.resource-row small {
+  display: block;
+}
+
+.resource-row strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-row small {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.resource-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .captured-transcript {
   display: grid;
   gap: 10px;

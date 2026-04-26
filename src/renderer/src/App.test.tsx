@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { CapturedSelection, MentorStreamEvent, RendererApi, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
+import type { CapturedResource } from '../../shared/resources'
 
 const tabsSnapshot: TabsSnapshot = {
   activeTabId: 'tab-1',
@@ -39,6 +40,7 @@ function installImprovementMock(): ImprovementMock {
   let selectionCaptured: ((selection: CapturedSelection) => void) | null = null
   let transcriptCapture: ((event: TranscriptCaptureEvent) => void) | null = null
   let mentorStream: ((event: MentorStreamEvent) => void) | null = null
+  const resources: CapturedResource[] = []
 
   const api: RendererApi = {
     createTab: vi.fn().mockResolvedValue(tabsSnapshot),
@@ -49,6 +51,15 @@ function installImprovementMock(): ImprovementMock {
     goForward: vi.fn().mockResolvedValue(tabsSnapshot),
     reload: vi.fn().mockResolvedValue(tabsSnapshot),
     setBrowserBounds: vi.fn(),
+    getCapturedResources: vi.fn().mockImplementation(() => Promise.resolve(resources)),
+    searchCapturedResources: vi.fn().mockResolvedValue(resources),
+    deleteCapturedResource: vi.fn().mockImplementation((id: string) => {
+      const index = resources.findIndex((resource) => resource.id === id)
+      if (index >= 0) {
+        resources.splice(index, 1)
+      }
+      return Promise.resolve()
+    }),
     getXaiStatus: vi.fn().mockResolvedValue({
       hasApiKey: true,
       source: 'environment',

@@ -6,7 +6,7 @@ Last updated: April 26, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, captured transcript review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -20,7 +20,10 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages, using a normal desktop Chrome user agent for embedded tabs, broadened transcript-panel selectors, a short wait for YouTube's dynamic rendering, and a visible-text fallback for timestamped transcript lines.
 - Manual HPAcademy transcript capture via the same browser toolbar button on HPAcademy video-like pages, reading from the visible transcript window.
 - Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube and HPAcademy extractors, and a registry/factory for selecting the right extractor by URL.
-- Transcript success/unavailable notices, captured transcript history for the current session, and one-click "Send to Grok" actions in the learning workspace.
+- Unified `CapturedResource` model for transcripts, PDFs, articles, textbooks, notes, and future resource types.
+- SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
+- Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
+- Transcript success/unavailable notices, a unified captured resource library, resource preview/delete controls, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
 - Follow-up mentor conversation panel in the right sidebar.
@@ -35,9 +38,10 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 
 ## Current Limitations
 
-- Notes are saved in renderer `localStorage` only.
+- Notes are saved in renderer `localStorage` only, though the resource model now supports future persisted notes.
 - Tab persistence stores URL/title/active status only; full browser navigation history is not persisted.
 - Mentor conversation history is in-memory only and resets when the app closes.
+- Resource storage currently persists captured transcripts only; PDF, article, textbook, file-upload, and note ingestion flows are future work built on the same model.
 - Temporary xAI API keys are kept only in main-process memory for the current session.
 - New Tab search currently uses Google directly.
 - The Visualizer is a styled placeholder and does not yet generate diagrams.
@@ -55,6 +59,7 @@ Current test coverage includes:
 - Tab persistence serialization and user-data file handling.
 - Webpage selection capture routing into the Grok mentor panel.
 - Manual YouTube and HPAcademy transcript capture UI, captured transcript review, one-click Grok sending, and unavailable-state messaging.
+- SQLite resource repository save/load, updates, search, type filtering, and deletion.
 - Session notes saving to local storage.
 - Learning-cell prompt starter behavior.
 - Formatted mentor responses and copy-to-clipboard behavior.
@@ -63,7 +68,8 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 ## Next Priorities
 
-- Persist notes, captures, and mentor sessions in a local-first database.
+- Add PDF, article, textbook, file-upload, and persisted note capture flows using the `CapturedResource` model.
+- Persist notes and mentor sessions in the local-first database.
 - Add richer markdown rendering for notes and mentor responses.
 - Add real visualizer generation and saved learning artifacts.
 - Add full browser history/session persistence across app restarts.

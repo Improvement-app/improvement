@@ -1,5 +1,8 @@
 import type { WebContents } from 'electron'
+import { randomUUID } from 'node:crypto'
 import type { TranscriptCaptureEvent } from '../../../shared/ipc'
+import { ipcChannels } from '../../../shared/ipc'
+import type { CapturedResource } from '../../../shared/resources'
 
 export interface TranscriptExtractionSuccess {
   ok: true
@@ -80,6 +83,33 @@ export abstract class TranscriptExtractor {
       title: result.title,
       url: result.url,
       reason: result.reason
+    }
+  }
+
+  sendToWorkspace(target: WebContents, result: TranscriptExtractionResult): TranscriptCaptureEvent {
+    const event = this.createWorkspaceEvent(result)
+    target.send(ipcChannels.transcriptCapture, event)
+    return event
+  }
+
+  createResource(result: TranscriptExtractionResult, capturedAt = new Date().toISOString()): CapturedResource | null {
+    if (!result.ok) {
+      return null
+    }
+
+    return {
+      id: randomUUID(),
+      type: 'transcript',
+      source: this.id,
+      title: result.title || `${this.label} transcript`,
+      url: result.url,
+      content: result.text,
+      capturedAt,
+      metadata: {
+        providerLabel: this.label,
+        capturedFrom: 'manual-transcript-capture'
+      },
+      tags: ['transcript', this.id]
     }
   }
 

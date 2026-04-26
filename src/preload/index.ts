@@ -21,6 +21,9 @@ const api: RendererApi = {
   setBrowserBounds: (bounds: BrowserBounds) => {
     ipcRenderer.send(ipcChannels.setBrowserBounds, bounds)
   },
+  getCapturedResources: () => ipcRenderer.invoke(ipcChannels.getCapturedResources),
+  searchCapturedResources: (query: string) => ipcRenderer.invoke(ipcChannels.searchCapturedResources, query),
+  deleteCapturedResource: (id: string) => ipcRenderer.invoke(ipcChannels.deleteCapturedResource, id),
   getXaiStatus: () => ipcRenderer.invoke(ipcChannels.getXaiStatus),
   setTemporaryXaiApiKey: (apiKey: string) => ipcRenderer.invoke(ipcChannels.setTemporaryXaiApiKey, apiKey),
   captureTranscript: () => ipcRenderer.invoke(ipcChannels.captureTranscript),
