@@ -73,6 +73,15 @@ pnpm dev
 
 The current prototype starts with Wikipedia, supports multiple tabs, and keeps the React application as the main window shell while web pages load only in the center browser area.
 
+To enable Grok mentor responses, set your xAI API key before launching:
+
+```bash
+export XAI_API_KEY="xai-your-api-key"
+pnpm dev
+```
+
+If `XAI_API_KEY` is not set, the right sidebar will show a temporary API key field. That key is passed to the Electron main process and kept in memory only for the current app session.
+
 ---
 
 ## Contributing

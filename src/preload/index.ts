@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BrowserBounds, CapturedSelection, RendererApi, TabId, TabsSnapshot } from '../shared/ipc'
+import type {
+  BrowserBounds,
+  CapturedSelection,
+  MentorStreamEvent,
+  RendererApi,
+  TabId,
+  TabsSnapshot
+} from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
 
 const api: RendererApi = {
@@ -13,6 +20,10 @@ const api: RendererApi = {
   setBrowserBounds: (bounds: BrowserBounds) => {
     ipcRenderer.send(ipcChannels.setBrowserBounds, bounds)
   },
+  getXaiStatus: () => ipcRenderer.invoke(ipcChannels.getXaiStatus),
+  setTemporaryXaiApiKey: (apiKey: string) => ipcRenderer.invoke(ipcChannels.setTemporaryXaiApiKey, apiKey),
+  sendCaptureToMentor: (capture: CapturedSelection) => ipcRenderer.invoke(ipcChannels.sendCaptureToMentor, capture),
+  sendMentorMessage: (message: string) => ipcRenderer.invoke(ipcChannels.sendMentorMessage, message),
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, snapshot: TabsSnapshot) => callback(snapshot)
     ipcRenderer.on(ipcChannels.tabsChanged, listener)
@@ -22,6 +33,11 @@ const api: RendererApi = {
     const listener = (_event: Electron.IpcRendererEvent, selection: CapturedSelection) => callback(selection)
     ipcRenderer.on(ipcChannels.selectionCaptured, listener)
     return () => ipcRenderer.removeListener(ipcChannels.selectionCaptured, listener)
+  },
+  onMentorStream: (callback: (event: MentorStreamEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, streamEvent: MentorStreamEvent) => callback(streamEvent)
+    ipcRenderer.on(ipcChannels.mentorStream, listener)
+    return () => ipcRenderer.removeListener(ipcChannels.mentorStream, listener)
   }
 }
 

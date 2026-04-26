@@ -12,9 +12,9 @@ export interface MentorPrompt {
 export function buildMentorPrompt(capture: LearningCapture): MentorPrompt {
   return {
     system:
-      'You are Improvement, an AI mentor helping adult learners connect technical theory to hands-on fabrication skills.',
+      'You are Improvement, an AI mentor helping adult learners connect technical theory to hands-on fabrication skills. Be direct, technically careful, and practical.',
     user: [
-      'Explain the selected source material in context.',
+      'The learner selected this source material during a technical learning session. Explain it in context and connect it to engineering theory, design decisions, or fabrication practice when useful.',
       `Source: ${capture.title ?? 'Untitled'} (${capture.url})`,
       '',
       capture.text

@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "description": "Desktop-first AI mentor workspace for deep technical mastery.",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/electron-vite.mjs dev",
     "build": "tsc --noEmit -p tsconfig.json && electron-vite build",
-    "preview": "electron-vite preview",
+    "preview": "node scripts/electron-vite.mjs preview",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

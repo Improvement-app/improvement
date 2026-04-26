@@ -27,6 +27,31 @@ export interface CapturedSelection {
   title: string
 }
 
+export type MentorMessageRole = 'user' | 'assistant' | 'system'
+
+export interface MentorMessage {
+  id: string
+  role: MentorMessageRole
+  content: string
+  source?: {
+    title: string
+    url: string
+  }
+  status?: 'streaming' | 'complete' | 'error'
+}
+
+export interface XaiStatus {
+  hasApiKey: boolean
+  source: 'environment' | 'temporary' | 'missing'
+  model: string
+}
+
+export type MentorStreamEvent =
+  | { type: 'started'; message: MentorMessage }
+  | { type: 'delta'; id: string; delta: string }
+  | { type: 'done'; id: string }
+  | { type: 'error'; id?: string; error: string }
+
 export interface RendererApi {
   createTab: (url?: string) => Promise<TabsSnapshot>
   closeTab: (tabId: TabId) => Promise<TabsSnapshot>
@@ -36,8 +61,13 @@ export interface RendererApi {
   goForward: () => Promise<TabsSnapshot>
   reload: () => Promise<TabsSnapshot>
   setBrowserBounds: (bounds: BrowserBounds) => void
+  getXaiStatus: () => Promise<XaiStatus>
+  setTemporaryXaiApiKey: (apiKey: string) => Promise<XaiStatus>
+  sendCaptureToMentor: (capture: CapturedSelection) => Promise<void>
+  sendMentorMessage: (message: string) => Promise<void>
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => () => void
   onSelectionCaptured: (callback: (selection: CapturedSelection) => void) => () => void
+  onMentorStream: (callback: (event: MentorStreamEvent) => void) => () => void
 }
 
 export const ipcChannels = {
@@ -51,5 +81,10 @@ export const ipcChannels = {
   setBrowserBounds: 'browser:set-bounds',
   tabsChanged: 'tabs:changed',
   selectionCaptured: 'selection:captured',
-  browserSelection: 'browser:selection'
+  browserSelection: 'browser:selection',
+  getXaiStatus: 'xai:get-status',
+  setTemporaryXaiApiKey: 'xai:set-temporary-api-key',
+  sendCaptureToMentor: 'mentor:send-capture',
+  sendMentorMessage: 'mentor:send-message',
+  mentorStream: 'mentor:stream'
 } as const

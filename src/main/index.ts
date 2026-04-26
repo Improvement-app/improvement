@@ -1,22 +1,49 @@
 import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron'
+import type { BrowserWindow as ElectronBrowserWindow, Event as ElectronEvent, WebContentsView as ElectronWebContentsView } from 'electron'
 import { join } from 'node:path'
-import type { BrowserBounds, BrowserTab, CapturedSelection, TabId, TabsSnapshot } from '../shared/ipc'
+import type {
+  BrowserBounds,
+  BrowserTab,
+  CapturedSelection,
+  MentorMessage,
+  MentorStreamEvent,
+  TabId,
+  TabsSnapshot,
+  XaiStatus
+} from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
 
 const DEFAULT_HOME_URL = 'https://www.wikipedia.org'
+const XAI_BASE_URL = 'https://api.x.ai/v1'
+const XAI_MODEL = process.env.XAI_MODEL || 'grok-4'
+const MENTOR_SYSTEM_PROMPT = [
+  'You are Improvement, an AI mentor for serious adult learners building deep technical mastery.',
+  'The learner is often studying engineering theory, vehicle design, fabrication, CNC machining, welding, additive manufacturing, engines, or related hands-on trade skills.',
+  'When source text is provided, explain it clearly, connect it to practical engineering or fabrication work when relevant, call out assumptions, and suggest useful next questions or exercises.',
+  'Be direct, technically careful, and supportive. Avoid pretending to know source context that was not provided.'
+].join(' ')
 
 interface ManagedTab {
   id: TabId
-  view: WebContentsView
+  view: ElectronWebContentsView
   title: string
   url: string
   isLoading: boolean
 }
 
-let mainWindow: BrowserWindow | null = null
+let mainWindow: ElectronBrowserWindow | null = null
 let activeTabId: TabId | null = null
 let lastBrowserBounds: BrowserBounds | null = null
+let temporaryXaiApiKey: string | null = null
+let mentorBusy = false
 const tabs = new Map<TabId, ManagedTab>()
+
+interface XaiChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+const mentorConversation: XaiChatMessage[] = []
 
 function normalizeUrl(input: string): string {
   const trimmed = input.trim()
@@ -111,7 +138,12 @@ function setActiveTab(tabId: TabId): void {
 function attachTabEvents(tab: ManagedTab): void {
   const { webContents } = tab.view
 
-  webContents.on('page-title-updated', (_event, title) => {
+  webContents.setWindowOpenHandler(({ url }) => {
+    createTab(url)
+    return { action: 'deny' }
+  })
+
+  webContents.on('page-title-updated', (_event: ElectronEvent, title: string) => {
     tab.title = title
     broadcastTabs()
   })
@@ -128,12 +160,12 @@ function attachTabEvents(tab: ManagedTab): void {
     broadcastTabs()
   })
 
-  webContents.on('did-navigate', (_event, url) => {
+  webContents.on('did-navigate', (_event: ElectronEvent, url: string) => {
     tab.url = url
     broadcastTabs()
   })
 
-  webContents.on('did-navigate-in-page', (_event, url) => {
+  webContents.on('did-navigate-in-page', (_event: ElectronEvent, url: string) => {
     tab.url = url
     broadcastTabs()
   })
@@ -147,7 +179,7 @@ function createTab(url = DEFAULT_HOME_URL): TabsSnapshot {
   const id = crypto.randomUUID()
   const view = new WebContentsView({
     webPreferences: {
-      preload: join(__dirname, '../preload/browser.mjs'),
+      preload: join(__dirname, '../preload/browser.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -216,6 +248,172 @@ function navigateActiveTab(url: string): TabsSnapshot {
   return broadcastTabs()
 }
 
+function getXaiApiKey(): { apiKey: string | null; source: XaiStatus['source'] } {
+  if (process.env.XAI_API_KEY) {
+    return { apiKey: process.env.XAI_API_KEY, source: 'environment' }
+  }
+
+  if (temporaryXaiApiKey) {
+    return { apiKey: temporaryXaiApiKey, source: 'temporary' }
+  }
+
+  return { apiKey: null, source: 'missing' }
+}
+
+function getXaiStatus(): XaiStatus {
+  const { apiKey, source } = getXaiApiKey()
+
+  return {
+    hasApiKey: Boolean(apiKey),
+    source,
+    model: XAI_MODEL
+  }
+}
+
+function sendMentorEvent(event: MentorStreamEvent): void {
+  mainWindow?.webContents.send(ipcChannels.mentorStream, event)
+}
+
+function buildCapturePrompt(capture: CapturedSelection): string {
+  return [
+    'The learner selected this web content and clicked "Send to AI".',
+    '',
+    `Page title: ${capture.title || 'Untitled page'}`,
+    `URL: ${capture.url}`,
+    '',
+    'Selected text:',
+    capture.text,
+    '',
+    'Explain the selection in a way that helps the learner build durable understanding. If useful, connect it to engineering theory, design decisions, fabrication practice, or project planning.'
+  ].join('\n')
+}
+
+function parseGrokError(status: number, body: string): string {
+  if (status === 401 || status === 403) {
+    return 'The xAI API key was rejected. Check XAI_API_KEY or enter a valid x.ai API key.'
+  }
+
+  if (body.trim().length > 0) {
+    return `xAI request failed (${status}): ${body.slice(0, 500)}`
+  }
+
+  return `xAI request failed with HTTP ${status}.`
+}
+
+function rememberConversationMessage(message: XaiChatMessage): void {
+  mentorConversation.push(message)
+
+  if (mentorConversation.length > 16) {
+    mentorConversation.splice(0, mentorConversation.length - 16)
+  }
+}
+
+async function streamMentorResponse(userContent: string): Promise<void> {
+  const { apiKey } = getXaiApiKey()
+
+  if (!apiKey) {
+    sendMentorEvent({
+      type: 'error',
+      error: 'Add an xAI API key before sending content to Grok. You can set XAI_API_KEY or enter a temporary key in the right sidebar.'
+    })
+    return
+  }
+
+  if (mentorBusy) {
+    sendMentorEvent({
+      type: 'error',
+      error: 'Grok is still responding. Wait for the current response to finish before sending another message.'
+    })
+    return
+  }
+
+  mentorBusy = true
+  rememberConversationMessage({ role: 'user', content: userContent })
+
+  const assistantMessage: MentorMessage = {
+    id: crypto.randomUUID(),
+    role: 'assistant',
+    content: '',
+    status: 'streaming'
+  }
+
+  sendMentorEvent({ type: 'started', message: assistantMessage })
+
+  try {
+    const response = await fetch(`${XAI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: XAI_MODEL,
+        stream: true,
+        temperature: 0.4,
+        messages: [
+          { role: 'system', content: MENTOR_SYSTEM_PROMPT },
+          ...mentorConversation
+        ]
+      })
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(parseGrokError(response.status, body))
+    }
+
+    if (!response.body) {
+      throw new Error('xAI returned an empty streaming response.')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let assistantContent = ''
+    let done = false
+
+    while (!done) {
+      const result = await reader.read()
+      done = result.done
+      buffer += decoder.decode(result.value, { stream: !done })
+
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+
+        if (!trimmed.startsWith('data:')) {
+          continue
+        }
+
+        const payload = trimmed.slice(5).trim()
+
+        if (payload === '[DONE]') {
+          done = true
+          break
+        }
+
+        const parsed = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> }
+        const delta = parsed.choices?.[0]?.delta?.content
+
+        if (delta) {
+          assistantContent += delta
+          sendMentorEvent({ type: 'delta', id: assistantMessage.id, delta })
+        }
+      }
+    }
+
+    rememberConversationMessage({ role: 'assistant', content: assistantContent })
+    sendMentorEvent({ type: 'done', id: assistantMessage.id })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to reach xAI.'
+    sendMentorEvent({ type: 'error', id: assistantMessage.id, error: message })
+  } finally {
+    mentorBusy = false
+  }
+}
+
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1500,
@@ -225,7 +423,7 @@ function createMainWindow(): void {
     title: 'Improvement',
     backgroundColor: '#0f172a',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -273,6 +471,23 @@ app.whenReady().then(() => {
     const tab = activeTabId ? tabs.get(activeTabId) : null
     tab?.view.webContents.reload()
     return getSnapshot()
+  })
+  ipcMain.handle(ipcChannels.getXaiStatus, () => getXaiStatus())
+  ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {
+    const trimmed = apiKey.trim()
+    temporaryXaiApiKey = trimmed.length > 0 ? trimmed : null
+    return getXaiStatus()
+  })
+  ipcMain.handle(ipcChannels.sendCaptureToMentor, async (_event, capture: CapturedSelection) => {
+    await streamMentorResponse(buildCapturePrompt(capture))
+  })
+  ipcMain.handle(ipcChannels.sendMentorMessage, async (_event, message: string) => {
+    const trimmed = message.trim()
+    if (trimmed.length === 0) {
+      return
+    }
+
+    await streamMentorResponse(trimmed)
   })
   ipcMain.on(ipcChannels.setBrowserBounds, (_event, bounds: BrowserBounds) => {
     lastBrowserBounds = bounds
