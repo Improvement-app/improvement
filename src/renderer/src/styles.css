@@ -206,7 +206,7 @@ button:disabled {
 }
 
 .sidebar.right {
-  width: 390px;
+  width: 430px;
 }
 
 .sidebar.collapsed {
@@ -286,6 +286,7 @@ h3 {
 
 .schedule-card,
 .visualizer-card,
+.notes-card,
 .mentor-message,
 .api-key-form,
 .mentor-error {
@@ -300,6 +301,57 @@ h3 {
   display: block;
   color: #667085;
   font-size: 12px;
+}
+
+.learning-workspace {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.workspace-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.workspace-heading span {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.card-header,
+.message-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-header span {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.card-header button,
+.message-header button {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid #d7deea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.card-header button:hover,
+.message-header button:hover {
+  background: #f8fafc;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
 }
 
 .schedule-card strong,
@@ -474,6 +526,18 @@ textarea {
   line-height: 1.45;
 }
 
+.notes-card {
+  display: grid;
+  gap: 12px;
+  background: #fbfdff;
+}
+
+.notes-editor {
+  min-height: 150px;
+  margin: 0;
+  background: #ffffff;
+}
+
 textarea:focus {
   border-color: #93c5fd;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
@@ -482,7 +546,7 @@ textarea:focus {
 .mentor-panel {
   display: grid;
   gap: 12px;
-  margin: 0 0 14px;
+  margin: 0;
 }
 
 .mentor-header {
@@ -569,7 +633,7 @@ textarea:focus {
 
 .mentor-message {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .mentor-message.user {
@@ -588,4 +652,114 @@ textarea:focus {
   color: #344054;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.mentor-placeholder {
+  color: #667085;
+  font-style: italic;
+}
+
+.mentor-formatted-content {
+  display: grid;
+  gap: 10px;
+}
+
+.mentor-formatted-content h4 {
+  margin: 2px 0 0;
+  color: #172033;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.mentor-formatted-content p {
+  white-space: pre-wrap;
+}
+
+.mentor-formatted-content ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.visualizer-card {
+  display: grid;
+  gap: 12px;
+  background:
+    linear-gradient(180deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0.94)),
+    #ffffff;
+}
+
+.visualizer-card p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.visualizer-preview {
+  position: relative;
+  height: 130px;
+  overflow: hidden;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background:
+    linear-gradient(#e8eef8 1px, transparent 1px),
+    linear-gradient(90deg, #e8eef8 1px, transparent 1px),
+    #f8fbff;
+  background-size: 24px 24px;
+}
+
+.axis {
+  position: absolute;
+  background: #94a3b8;
+}
+
+.axis.horizontal {
+  left: 22px;
+  right: 18px;
+  bottom: 24px;
+  height: 1px;
+}
+
+.axis.vertical {
+  left: 28px;
+  top: 18px;
+  bottom: 18px;
+  width: 1px;
+}
+
+.curve {
+  position: absolute;
+  left: 42px;
+  right: 28px;
+  bottom: 32px;
+  height: 64px;
+  border: solid #2563eb;
+  border-width: 0 0 3px 3px;
+  border-radius: 0 0 0 100%;
+  transform: skewX(-18deg);
+}
+
+.point {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid white;
+  border-radius: 999px;
+  background: #1d4ed8;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.point.one {
+  left: 44%;
+  top: 44%;
+}
+
+.point.two {
+  right: 20%;
+  top: 26%;
 }

@@ -12,6 +12,10 @@ function activeTabFrom(snapshot: TabsSnapshot): BrowserTab | null {
 }
 
 function formatHostname(url: string): string {
+  if (url === 'improvement://new-tab') {
+    return 'New Tab'
+  }
+
   try {
     return new URL(url).hostname.replace(/^www\./, '')
   } catch {
@@ -19,10 +23,62 @@ function formatHostname(url: string): string {
   }
 }
 
+function formatAddress(url: string): string {
+  return url === 'improvement://new-tab' ? '' : url
+}
+
+function formatSavedTime(value: string | null): string {
+  if (!value) {
+    return 'Not saved yet'
+  }
+
+  return `Saved ${new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(value))}`
+}
+
+function FormattedMentorContent({ content }: { content: string }): ReactElement {
+  const blocks = content
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+
+  if (blocks.length === 0) {
+    return <p className="mentor-placeholder">Grok is thinking...</p>
+  }
+
+  return (
+    <div className="mentor-formatted-content">
+      {blocks.map((block, index) => {
+        const bulletLines = block.split('\n').filter((line) => /^[-*]\s+/.test(line.trim()))
+
+        if (/^#{1,3}\s+/.test(block)) {
+          return <h4 key={index}>{block.replace(/^#{1,3}\s+/, '')}</h4>
+        }
+
+        if (bulletLines.length > 0 && bulletLines.length === block.split('\n').length) {
+          return (
+            <ul key={index}>
+              {bulletLines.map((line, lineIndex) => (
+                <li key={lineIndex}>{line.replace(/^[-*]\s+/, '')}</li>
+              ))}
+            </ul>
+          )
+        }
+
+        return <p key={index}>{block}</p>
+      })}
+    </div>
+  )
+}
+
 export default function App(): ReactElement {
   const browserFrameRef = useRef<HTMLDivElement | null>(null)
   const [snapshot, setSnapshot] = useState<TabsSnapshot>(initialSnapshot)
-  const [address, setAddress] = useState('https://www.wikipedia.org')
+  const [address, setAddress] = useState('')
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
   const [xaiStatus, setXaiStatus] = useState<XaiStatus | null>(null)
@@ -31,6 +87,9 @@ export default function App(): ReactElement {
   const [followUp, setFollowUp] = useState('')
   const [mentorError, setMentorError] = useState<string | null>(null)
   const [isMentorStreaming, setIsMentorStreaming] = useState(false)
+  const [notes, setNotes] = useState(() => window.localStorage.getItem('improvement.notes') ?? '')
+  const [lastSavedAt, setLastSavedAt] = useState(() => window.localStorage.getItem('improvement.notesSavedAt'))
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
 
@@ -43,7 +102,7 @@ export default function App(): ReactElement {
       setSnapshot(nextSnapshot)
       const nextActiveTab = activeTabFrom(nextSnapshot)
       if (nextActiveTab) {
-        setAddress(nextActiveTab.url)
+        setAddress(formatAddress(nextActiveTab.url))
       }
     })
 
@@ -129,7 +188,7 @@ export default function App(): ReactElement {
   }
 
   const createTab = async (): Promise<void> => {
-    setSnapshot(await window.improvement.createTab('https://www.wikipedia.org'))
+    setSnapshot(await window.improvement.createTab())
   }
 
   const closeTab = async (tabId: string): Promise<void> => {
@@ -141,6 +200,19 @@ export default function App(): ReactElement {
     setMentorError(null)
     setXaiStatus(await window.improvement.setTemporaryXaiApiKey(temporaryApiKey))
     setTemporaryApiKey('')
+  }
+
+  const saveNotes = (): void => {
+    const savedAt = new Date().toISOString()
+    window.localStorage.setItem('improvement.notes', notes)
+    window.localStorage.setItem('improvement.notesSavedAt', savedAt)
+    setLastSavedAt(savedAt)
+  }
+
+  const copyMessage = async (message: MentorMessage): Promise<void> => {
+    await navigator.clipboard.writeText(message.content)
+    setCopiedMessageId(message.id)
+    window.setTimeout(() => setCopiedMessageId(null), 1400)
   }
 
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
@@ -322,10 +394,31 @@ export default function App(): ReactElement {
             {rightCollapsed ? 'Notes' : 'Collapse'}
           </button>
           {!rightCollapsed && (
-            <div className="panel-content">
-              <p className="eyebrow">Notes + Visualizer</p>
-              <h2>Learning workspace</h2>
-              <textarea placeholder="Capture your understanding, mentor prompts, and project notes..." />
+            <div className="panel-content learning-workspace">
+              <div className="workspace-heading">
+                <p className="eyebrow">Learning Workspace</p>
+                <h2>Notes + Mentor</h2>
+                <span>Capture ideas, ask Grok, and turn browsing into retained understanding.</span>
+              </div>
+
+              <section className="notes-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Session notes</h3>
+                    <span>{formatSavedTime(lastSavedAt)}</span>
+                  </div>
+                  <button type="button" onClick={saveNotes}>
+                    Save
+                  </button>
+                </div>
+                <textarea
+                  className="notes-editor"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Write your takeaways, open questions, formulas, build notes, or ideas to revisit..."
+                />
+              </section>
+
               <section className="mentor-panel">
                 <div className="mentor-header">
                   <div>
@@ -373,13 +466,24 @@ export default function App(): ReactElement {
                             : 'mentor-message user'
                         }
                       >
-                        <strong>{message.role === 'assistant' ? 'Grok' : 'You'}</strong>
+                        <div className="message-header">
+                          <strong>{message.role === 'assistant' ? 'Grok' : 'You'}</strong>
+                          {message.role === 'assistant' && message.content.length > 0 && (
+                            <button type="button" onClick={() => void copyMessage(message)}>
+                              {copiedMessageId === message.id ? 'Copied' : 'Copy'}
+                            </button>
+                          )}
+                        </div>
                         {message.source && (
                           <span className="message-source">
                             {message.source.title} · {formatHostname(message.source.url)}
                           </span>
                         )}
-                        <p>{message.content}</p>
+                        {message.role === 'assistant' ? (
+                          <FormattedMentorContent content={message.content} />
+                        ) : (
+                          <p>{message.content}</p>
+                        )}
                       </article>
                     ))
                   )}
@@ -397,9 +501,23 @@ export default function App(): ReactElement {
                   </button>
                 </form>
               </section>
+
               <div className="visualizer-card">
-                <span>Visualizer placeholder</span>
-                <strong>Diagrams, charts, and fabrication previews will appear here.</strong>
+                <div className="card-header">
+                  <div>
+                    <h3>Visualizer</h3>
+                    <span>Coming soon</span>
+                  </div>
+                </div>
+                <div className="visualizer-preview">
+                  <div className="axis horizontal" />
+                  <div className="axis vertical" />
+                  <div className="curve" />
+                  <div className="point one" />
+                  <div className="point two" />
+                </div>
+                <strong>Future diagrams, charts, and fabrication previews will appear here.</strong>
+                <p>Use this space for geometry sketches, process flows, force diagrams, and AI-generated explanations tied to your notes.</p>
               </div>
             </div>
           )}

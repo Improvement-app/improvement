@@ -13,7 +13,7 @@ import type {
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
 
-const DEFAULT_HOME_URL = 'https://www.wikipedia.org'
+const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
 const XAI_MODEL = process.env.XAI_MODEL || 'grok-4'
 const MENTOR_SYSTEM_PROMPT = [
@@ -49,7 +49,11 @@ function normalizeUrl(input: string): string {
   const trimmed = input.trim()
 
   if (trimmed.length === 0) {
-    return DEFAULT_HOME_URL
+    return NEW_TAB_URL
+  }
+
+  if (trimmed === NEW_TAB_URL) {
+    return NEW_TAB_URL
   }
 
   if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) {
@@ -63,6 +67,182 @@ function normalizeUrl(input: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`
 }
 
+function isNewTabUrl(url: string): boolean {
+  return url === NEW_TAB_URL || url.startsWith('data:text/html')
+}
+
+function createNewTabHtml(): string {
+  const resources = [
+    ['YouTube Engineering', 'Videos, lectures, fabrication channels', 'https://www.youtube.com/results?search_query=engineering+fabrication+vehicle+dynamics'],
+    ['HP Academy', 'Motorsport wiring, tuning, and fabrication', 'https://www.hpacademy.com/'],
+    ['MIT OpenCourseWare', 'Engineering fundamentals and math refreshers', 'https://ocw.mit.edu/'],
+    ['Engineering Toolbox', 'Reference data, formulas, and calculators', 'https://www.engineeringtoolbox.com/'],
+    ['NASA Technical Reports', 'Aerospace and engineering research archive', 'https://ntrs.nasa.gov/'],
+    ['McMaster-Carr', 'Materials, fasteners, and mechanical components', 'https://www.mcmaster.com/'],
+    ['MDN Web Docs', 'Technical documentation patterns and reference', 'https://developer.mozilla.org/'],
+    ['Wikipedia', 'Fast overview before deeper source work', 'https://www.wikipedia.org/']
+  ]
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>New Tab</title>
+    <style>
+      :root {
+        color: #172033;
+        background: #f5f7fb;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: start center;
+        padding: 8vh 32px 48px;
+        background:
+          radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 30rem),
+          linear-gradient(180deg, #ffffff, #f5f7fb);
+      }
+      main { width: min(940px, 100%); }
+      .kicker {
+        margin: 0 0 10px;
+        color: #2563eb;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        color: #111827;
+        font-size: clamp(34px, 5vw, 58px);
+        letter-spacing: -0.06em;
+      }
+      .subtitle {
+        max-width: 680px;
+        margin: 14px 0 28px;
+        color: #667085;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        max-width: 760px;
+        padding: 8px;
+        border: 1px solid #d7deea;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 18px 50px rgba(39, 52, 78, 0.10);
+      }
+      input {
+        width: 100%;
+        min-width: 0;
+        padding: 14px 16px;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: #172033;
+        font: inherit;
+      }
+      button {
+        border: 0;
+        border-radius: 13px;
+        padding: 0 18px;
+        background: #1d4ed8;
+        color: white;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      section {
+        margin-top: 34px;
+      }
+      .section-title {
+        margin: 0 0 14px;
+        color: #344054;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px;
+      }
+      a {
+        min-height: 112px;
+        padding: 16px;
+        border: 1px solid #e3e8f2;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.86);
+        color: inherit;
+        text-decoration: none;
+        transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+      }
+      a:hover {
+        border-color: #bfdbfe;
+        box-shadow: 0 16px 36px rgba(39, 52, 78, 0.10);
+        transform: translateY(-1px);
+      }
+      strong {
+        display: block;
+        margin-bottom: 8px;
+        color: #172033;
+      }
+      span {
+        display: block;
+        color: #667085;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">Improvement Browser</p>
+      <h1>Start a focused learning session.</h1>
+      <p class="subtitle">Search the web or jump into trusted technical resources for engineering theory, fabrication practice, and project research.</p>
+      <form id="search-form">
+        <input id="search-input" autofocus placeholder="Search technical topics, videos, formulas, or documentation..." />
+        <button type="submit">Search</button>
+      </form>
+      <section>
+        <p class="section-title">Technical learning resources</p>
+        <div class="grid">
+          ${resources
+            .map(
+              ([title, description, url]) =>
+                `<a href="${url}"><strong>${title}</strong><span>${description}</span></a>`
+            )
+            .join('')}
+        </div>
+      </section>
+    </main>
+    <script>
+      document.getElementById('search-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const query = document.getElementById('search-input').value.trim();
+        if (query) {
+          window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
+        }
+      });
+    </script>
+  </body>
+</html>`
+}
+
+function resolveLoadUrl(url: string): string {
+  if (url === NEW_TAB_URL) {
+    return `data:text/html;charset=utf-8,${encodeURIComponent(createNewTabHtml())}`
+  }
+
+  return url
+}
+
 function tabFromWebContentsId(webContentsId: number): ManagedTab | undefined {
   return [...tabs.values()].find((tab) => tab.view.webContents.id === webContentsId)
 }
@@ -71,7 +251,7 @@ function getTabSnapshot(tab: ManagedTab): BrowserTab {
   return {
     id: tab.id,
     title: tab.title || 'New Tab',
-    url: tab.url,
+    url: isNewTabUrl(tab.url) ? NEW_TAB_URL : tab.url,
     isLoading: tab.isLoading,
     canGoBack: tab.view.webContents.navigationHistory.canGoBack(),
     canGoForward: tab.view.webContents.navigationHistory.canGoForward()
@@ -155,23 +335,24 @@ function attachTabEvents(tab: ManagedTab): void {
 
   webContents.on('did-stop-loading', () => {
     tab.isLoading = false
-    tab.url = webContents.getURL()
-    tab.title = webContents.getTitle() || tab.title
+    const currentUrl = webContents.getURL()
+    tab.url = isNewTabUrl(currentUrl) ? NEW_TAB_URL : currentUrl
+    tab.title = isNewTabUrl(currentUrl) ? 'New Tab' : webContents.getTitle() || tab.title
     broadcastTabs()
   })
 
   webContents.on('did-navigate', (_event: ElectronEvent, url: string) => {
-    tab.url = url
+    tab.url = isNewTabUrl(url) ? NEW_TAB_URL : url
     broadcastTabs()
   })
 
   webContents.on('did-navigate-in-page', (_event: ElectronEvent, url: string) => {
-    tab.url = url
+    tab.url = isNewTabUrl(url) ? NEW_TAB_URL : url
     broadcastTabs()
   })
 }
 
-function createTab(url = DEFAULT_HOME_URL): TabsSnapshot {
+function createTab(url = NEW_TAB_URL): TabsSnapshot {
   if (!mainWindow) {
     return getSnapshot()
   }
@@ -197,7 +378,7 @@ function createTab(url = DEFAULT_HOME_URL): TabsSnapshot {
   tabs.set(id, tab)
   attachTabEvents(tab)
   setActiveTab(id)
-  view.webContents.loadURL(tab.url)
+  view.webContents.loadURL(resolveLoadUrl(tab.url))
 
   return broadcastTabs()
 }
@@ -244,7 +425,7 @@ function navigateActiveTab(url: string): TabsSnapshot {
   }
 
   tab.url = normalizeUrl(url)
-  tab.view.webContents.loadURL(tab.url)
+  tab.view.webContents.loadURL(resolveLoadUrl(tab.url))
   return broadcastTabs()
 }
 
@@ -441,7 +622,7 @@ function createMainWindow(): void {
   }
 
   mainWindow.webContents.once('did-finish-load', () => {
-    createTab(DEFAULT_HOME_URL)
+    createTab()
   })
 }
 
