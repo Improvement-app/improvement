@@ -440,6 +440,10 @@ h3 {
   gap: 6px;
 }
 
+.resource-preview-header {
+  align-items: flex-start;
+}
+
 .captured-transcript {
   display: grid;
   gap: 10px;
@@ -465,6 +469,38 @@ h3 {
   font-family: inherit;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.transcript-readable {
+  display: grid;
+  gap: 12px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 2px 4px 2px 0;
+  color: #26344d;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.transcript-readable p {
+  margin: 0;
+}
+
+.transcript-readable.timestamped {
+  gap: 9px;
+}
+
+.transcript-line {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.transcript-timestamp {
+  color: #98a2b3;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.8;
 }
 
 .card-header,

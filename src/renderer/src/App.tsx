@@ -99,6 +99,97 @@ function resourceFromTranscriptEvent(event: Extract<TranscriptCaptureEvent, { ty
   }
 }
 
+interface TranscriptSegment {
+  timestamp: string
+  text: string
+}
+
+function parseTranscriptSegments(content: string): TranscriptSegment[] {
+  const timestampPattern = /(?:^|\s)(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:-\s*)?/g
+  const matches = [...content.matchAll(timestampPattern)]
+
+  return matches
+    .map((match, index) => {
+      const start = (match.index ?? 0) + match[0].length
+      const end = matches[index + 1]?.index ?? content.length
+      const text = content.slice(start, end).replace(/\s+/g, ' ').trim()
+
+      return {
+        timestamp: match[1],
+        text
+      }
+    })
+    .filter((segment) => segment.text.length > 0)
+}
+
+function cleanTranscriptText(content: string): string {
+  return content
+    .replace(/(?:^|\s)\d{1,2}:\d{2}(?::\d{2})?\s*(?:-\s*)?/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function transcriptParagraphs(content: string): string[] {
+  const segments = parseTranscriptSegments(content)
+
+  if (segments.length === 0) {
+    return content
+      .split(/\n{2,}/)
+      .map((paragraph) => cleanTranscriptText(paragraph))
+      .filter(Boolean)
+  }
+
+  const paragraphs: string[] = []
+  let current = ''
+
+  for (const segment of segments) {
+    current = `${current} ${segment.text}`.trim()
+
+    if (current.length >= 260 && /[.!?]"?$/.test(segment.text)) {
+      paragraphs.push(current)
+      current = ''
+    }
+  }
+
+  if (current) {
+    paragraphs.push(current)
+  }
+
+  return paragraphs.length > 0 ? paragraphs : [cleanTranscriptText(content)].filter(Boolean)
+}
+
+function TranscriptResourcePreview({
+  resource,
+  showTimestamps
+}: {
+  resource: CapturedResource
+  showTimestamps: boolean
+}): ReactElement {
+  const segments = parseTranscriptSegments(resource.content)
+  const paragraphs = transcriptParagraphs(resource.content)
+
+  if (showTimestamps && segments.length > 0) {
+    return (
+      <div className="transcript-readable timestamped">
+        {segments.map((segment, index) => (
+          <p key={`${segment.timestamp}-${index}`} className="transcript-line">
+            <span className="transcript-timestamp">{segment.timestamp}</span>
+            <span>{segment.text}</span>
+          </p>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="transcript-readable">
+      {paragraphs.map((paragraph, index) => (
+        <p key={index}>{paragraph}</p>
+      ))}
+    </div>
+  )
+}
+
 function FormattedMentorContent({ content }: { content: string }): ReactElement {
   const blocks = content
     .split(/\n{2,}/)
@@ -149,9 +240,11 @@ export default function App(): ReactElement {
   const [notes, setNotes] = useState(() => window.localStorage.getItem('improvement.notes') ?? '')
   const [lastSavedAt, setLastSavedAt] = useState(() => window.localStorage.getItem('improvement.notesSavedAt'))
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [copiedResourceId, setCopiedResourceId] = useState<string | null>(null)
   const [transcriptNotice, setTranscriptNotice] = useState<TranscriptCaptureEvent | null>(null)
   const [capturedResources, setCapturedResources] = useState<CapturedResource[]>([])
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
+  const [showTranscriptTimestamps, setShowTranscriptTimestamps] = useState(false)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
@@ -299,6 +392,12 @@ export default function App(): ReactElement {
     await navigator.clipboard.writeText(message.content)
     setCopiedMessageId(message.id)
     window.setTimeout(() => setCopiedMessageId(null), 1400)
+  }
+
+  const copyResourceContent = async (resource: CapturedResource): Promise<void> => {
+    await navigator.clipboard.writeText(resource.content)
+    setCopiedResourceId(resource.id)
+    window.setTimeout(() => setCopiedResourceId(null), 1400)
   }
 
   const handleTranscriptCapture = async (event: TranscriptCaptureEvent): Promise<void> => {
@@ -589,12 +688,26 @@ export default function App(): ReactElement {
                   </div>
                   {selectedResource && (
                     <article className="captured-transcript resource-preview">
-                      <div className="message-header">
+                      <div className="message-header resource-preview-header">
                         <div>
                           <strong>{selectedResource.title || 'Captured resource'}</strong>
-                          <span>{selectedResource.url ? formatHostname(selectedResource.url) : selectedResource.source}</span>
+                          <span>
+                            {selectedResource.type} · {selectedResource.url ? formatHostname(selectedResource.url) : selectedResource.source}
+                          </span>
                         </div>
                         <div className="resource-actions">
+                          {selectedResource.type === 'transcript' && (
+                            <button type="button" onClick={() => setShowTranscriptTimestamps((value) => !value)}>
+                              {showTranscriptTimestamps ? 'Hide timestamps' : 'Show timestamps'}
+                            </button>
+                          )}
+                          <button type="button" onClick={() => void copyResourceContent(selectedResource)}>
+                            {copiedResourceId === selectedResource.id
+                              ? 'Copied'
+                              : selectedResource.type === 'transcript'
+                                ? 'Copy full transcript'
+                                : 'Copy resource'}
+                          </button>
                           <button type="button" onClick={() => void sendResourceToGrok(selectedResource)}>
                             Send to Grok
                           </button>
@@ -603,7 +716,11 @@ export default function App(): ReactElement {
                           </button>
                         </div>
                       </div>
-                      <pre>{selectedResource.content}</pre>
+                      {selectedResource.type === 'transcript' ? (
+                        <TranscriptResourcePreview resource={selectedResource} showTimestamps={showTranscriptTimestamps} />
+                      ) : (
+                        <pre>{selectedResource.content}</pre>
+                      )}
                     </article>
                   )}
                 </section>

@@ -35,12 +35,12 @@ interface ImprovementMock {
   emitMentorStream: (event: MentorStreamEvent) => void
 }
 
-function installImprovementMock(): ImprovementMock {
+function installImprovementMock(initialResources: CapturedResource[] = []): ImprovementMock {
   let tabsChanged: ((snapshot: TabsSnapshot) => void) | null = null
   let selectionCaptured: ((selection: CapturedSelection) => void) | null = null
   let transcriptCapture: ((event: TranscriptCaptureEvent) => void) | null = null
   let mentorStream: ((event: MentorStreamEvent) => void) | null = null
-  const resources: CapturedResource[] = []
+  const resources: CapturedResource[] = [...initialResources]
 
   const api: RendererApi = {
     createTab: vi.fn().mockResolvedValue(tabsSnapshot),
@@ -269,6 +269,53 @@ describe('App', () => {
     expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
     expect(screen.getAllByText(/EFI Tuning Fundamentals/).length).toBeGreaterThan(0)
     expect(screen.getByText('Welcome to this lesson. We are going to tune the fuel table.')).toBeInTheDocument()
+  })
+
+  it('renders captured transcripts as clean readable text with optional timestamps', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    })
+
+    installImprovementMock([
+      {
+        id: 'resource-1',
+        type: 'transcript',
+        source: 'youtube',
+        title: 'Brake Bias Explained',
+        url: 'https://www.youtube.com/watch?v=brakes',
+        content:
+          "00:00 - One of the terms that's often thrown around is brake bias. 00:09 This would easily be one of the most misused terms in setup discussions.",
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        metadata: { videoId: 'brakes' },
+        tags: ['transcript']
+      }
+    ])
+
+    render(<App />)
+
+    expect((await screen.findAllByText('Brake Bias Explained')).length).toBeGreaterThan(0)
+    expect(
+      screen.getByText(
+        "One of the terms that's often thrown around is brake bias. This would easily be one of the most misused terms in setup discussions."
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show timestamps' }))
+
+    expect(screen.getByText('00:00')).toBeInTheDocument()
+    expect(screen.getByText('00:09')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Copy full transcript' }))
+
+    expect(writeText).toHaveBeenCalledWith(
+      "00:00 - One of the terms that's often thrown around is brake bias. 00:09 This would easily be one of the most misused terms in setup discussions."
+    )
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 
   it('saves session notes to local storage', async () => {

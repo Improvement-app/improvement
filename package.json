@@ -6,10 +6,12 @@
   "type": "commonjs",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "node scripts/electron-vite.mjs dev",
-    "build": "tsc --noEmit -p tsconfig.json && electron-vite build",
-    "preview": "node scripts/electron-vite.mjs preview",
-    "test": "vitest run",
+    "dev": "pnpm run rebuild:native && node scripts/electron-vite.mjs dev",
+    "build": "tsc --noEmit -p tsconfig.json && pnpm run rebuild:native && electron-vite build",
+    "preview": "pnpm run rebuild:native && node scripts/electron-vite.mjs preview",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:node": "pnpm rebuild better-sqlite3",
+    "test": "pnpm run rebuild:node && vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -18,6 +20,7 @@
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

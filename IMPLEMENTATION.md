@@ -22,8 +22,9 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube and HPAcademy extractors, and a registry/factory for selecting the right extractor by URL.
 - Unified `CapturedResource` model for transcripts, PDFs, articles, textbooks, notes, and future resource types.
 - SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
+- Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
-- Transcript success/unavailable notices, a unified captured resource library, resource preview/delete controls, and one-click "Send to Grok" actions in the learning workspace.
+- Transcript success/unavailable notices, a unified captured resource library, cleaned transcript reading view with optional timestamps, copy/delete controls, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
 - Follow-up mentor conversation panel in the right sidebar.
@@ -59,6 +60,7 @@ Current test coverage includes:
 - Tab persistence serialization and user-data file handling.
 - Webpage selection capture routing into the Grok mentor panel.
 - Manual YouTube and HPAcademy transcript capture UI, captured transcript review, one-click Grok sending, and unavailable-state messaging.
+- Clean transcript resource rendering, timestamp toggling, and full transcript copying.
 - SQLite resource repository save/load, updates, search, type filtering, and deletion.
 - Session notes saving to local storage.
 - Learning-cell prompt starter behavior.

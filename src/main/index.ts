@@ -13,7 +13,6 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import { ResourceRepository } from './resources/ResourceRepository'
 import {
   createPersistedTabState,
   readPersistedTabState,
@@ -21,6 +20,8 @@ import {
   type PersistedTabState
 } from './tabPersistence'
 import { getTranscriptExtractor } from './transcript'
+
+type ResourceRepositoryInstance = import('./resources/ResourceRepository').ResourceRepository
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -49,7 +50,7 @@ let temporaryXaiApiKey: string | null = null
 let mentorBusy = false
 let isQuitting = false
 let hasSavedTabsForQuit = false
-let resourceRepository: ResourceRepository | null = null
+let resourceRepository: ResourceRepositoryInstance | null = null
 const tabs = new Map<TabId, ManagedTab>()
 
 interface XaiChatMessage {
@@ -321,6 +322,16 @@ async function captureActiveTranscript(): Promise<TranscriptCaptureEvent> {
   }
 
   return extractor.createWorkspaceEvent(result)
+}
+
+async function initializeResourceRepository(): Promise<void> {
+  try {
+    const { ResourceRepository } = await import('./resources/ResourceRepository')
+    resourceRepository = new ResourceRepository(app.getPath('userData'))
+  } catch (error) {
+    console.warn('Captured resource storage is disabled because SQLite failed to initialize:', error)
+    resourceRepository = null
+  }
 }
 
 async function saveCurrentTabs(): Promise<void> {
@@ -761,9 +772,9 @@ function createMainWindow(): void {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   configureBrowserSession()
-  resourceRepository = new ResourceRepository(app.getPath('userData'))
+  await initializeResourceRepository()
 
   ipcMain.handle(ipcChannels.createTab, (_event, url?: string) => createTab(url))
   ipcMain.handle(ipcChannels.closeTab, (_event, tabId: TabId) => closeTab(tabId))
@@ -857,6 +868,8 @@ app.whenReady().then(() => {
       createMainWindow()
     }
   })
+}).catch((error) => {
+  console.error('Unable to start Improvement:', error)
 })
 
 app.on('window-all-closed', () => {
