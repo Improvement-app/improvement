@@ -17,7 +17,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Internal New Tab page at `improvement://new-tab` with search and technical learning resource links.
 - New-window interception so `target="_blank"` and `window.open()` open as internal app tabs.
 - Webpage text selection capture with floating "Send to AI" button.
-- Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages.
+- Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages, using broadened transcript-panel selectors, a short wait for YouTube's dynamic rendering, and a visible-text fallback for timestamped transcript lines.
 - YouTube transcript success/unavailable notices, captured transcript history for the current session, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
