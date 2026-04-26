@@ -38,6 +38,21 @@ function isYouTubeWatchPage(url: string): boolean {
   }
 }
 
+function isHPAcademyVideoPage(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.replace(/^www\./, '')
+
+    if (hostname !== 'hpacademy.com' && hostname !== 'members.hpacademy.com') {
+      return false
+    }
+
+    return /\/(courses?|lessons?|modules?|webinars?|learn|members?|videos?)\b/i.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
 function formatSavedTime(value: string | null): string {
   if (!value) {
     return 'Not saved yet'
@@ -106,7 +121,7 @@ export default function App(): ReactElement {
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
-  const canCaptureTranscript = Boolean(activeTab && isYouTubeWatchPage(activeTab.url))
+  const canCaptureTranscript = Boolean(activeTab && (isYouTubeWatchPage(activeTab.url) || isHPAcademyVideoPage(activeTab.url)))
 
   useEffect(() => {
     window.improvement.getXaiStatus().then(setXaiStatus).catch(() => {
@@ -249,12 +264,12 @@ export default function App(): ReactElement {
     setIsCapturingTranscript(true)
 
     try {
-      await handleTranscriptCapture(await window.improvement.captureYouTubeTranscript())
+      await handleTranscriptCapture(await window.improvement.captureTranscript())
     } catch {
       const event: TranscriptCaptureEvent = {
         type: 'unavailable',
         capturedAt: new Date().toISOString(),
-        title: activeTab?.title || 'YouTube video',
+        title: activeTab?.title || 'Video',
         url: activeTab?.url || '',
         reason: 'Unable to capture the transcript from the current page.'
       }
@@ -267,7 +282,7 @@ export default function App(): ReactElement {
   const sendTranscriptToGrok = async (transcript: CapturedSelection): Promise<void> => {
     await sendCaptureToMentor({
       ...transcript,
-      text: `YouTube transcript captured manually.\n\n${transcript.text}`
+      text: `Video transcript captured manually.\n\n${transcript.text}`
     })
   }
 
@@ -474,7 +489,7 @@ export default function App(): ReactElement {
                   </div>
                   <p>
                     {transcriptNotice.type === 'captured'
-                      ? 'The YouTube transcript is ready in the workspace. Review it, then send it to Grok when you are ready.'
+                      ? 'The transcript is ready in the workspace. Review it, then send it to Grok when you are ready.'
                       : transcriptNotice.reason}
                   </p>
                 </section>
@@ -493,7 +508,7 @@ export default function App(): ReactElement {
                       <article key={`${transcript.url}-${index}`} className="captured-transcript">
                         <div className="message-header">
                           <div>
-                            <strong>{transcript.title || 'YouTube transcript'}</strong>
+                            <strong>{transcript.title || 'Video transcript'}</strong>
                             <span>{formatHostname(transcript.url)}</span>
                           </div>
                           <button type="button" onClick={() => void sendTranscriptToGrok(transcript)}>

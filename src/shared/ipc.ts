@@ -77,7 +77,7 @@ export interface RendererApi {
   setBrowserBounds: (bounds: BrowserBounds) => void
   getXaiStatus: () => Promise<XaiStatus>
   setTemporaryXaiApiKey: (apiKey: string) => Promise<XaiStatus>
-  captureYouTubeTranscript: () => Promise<TranscriptCaptureEvent>
+  captureTranscript: () => Promise<TranscriptCaptureEvent>
   sendCaptureToMentor: (capture: CapturedSelection) => Promise<void>
   sendMentorMessage: (message: string) => Promise<void>
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => () => void
@@ -100,9 +100,9 @@ export const ipcChannels = {
   browserSelection: 'browser:selection',
   getXaiStatus: 'xai:get-status',
   setTemporaryXaiApiKey: 'xai:set-temporary-api-key',
-  captureYouTubeTranscript: 'transcript:capture-youtube',
+  captureTranscript: 'transcript:capture',
   sendCaptureToMentor: 'mentor:send-capture',
   sendMentorMessage: 'mentor:send-message',
   mentorStream: 'mentor:stream',
-  transcriptCapture: 'transcript:capture'
+  transcriptCapture: 'transcript:captured'
 } as const

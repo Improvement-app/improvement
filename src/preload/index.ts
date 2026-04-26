@@ -23,7 +23,7 @@ const api: RendererApi = {
   },
   getXaiStatus: () => ipcRenderer.invoke(ipcChannels.getXaiStatus),
   setTemporaryXaiApiKey: (apiKey: string) => ipcRenderer.invoke(ipcChannels.setTemporaryXaiApiKey, apiKey),
-  captureYouTubeTranscript: () => ipcRenderer.invoke(ipcChannels.captureYouTubeTranscript),
+  captureTranscript: () => ipcRenderer.invoke(ipcChannels.captureTranscript),
   sendCaptureToMentor: (capture: CapturedSelection) => ipcRenderer.invoke(ipcChannels.sendCaptureToMentor, capture),
   sendMentorMessage: (message: string) => ipcRenderer.invoke(ipcChannels.sendMentorMessage, message),
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => {

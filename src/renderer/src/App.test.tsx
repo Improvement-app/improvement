@@ -59,7 +59,7 @@ function installImprovementMock(): ImprovementMock {
       source: 'temporary',
       model: 'grok-4'
     }),
-    captureYouTubeTranscript: vi.fn().mockResolvedValue({
+    captureTranscript: vi.fn().mockResolvedValue({
       type: 'captured',
       capturedAt: '2026-04-26T12:00:00.000Z',
       capture: {
@@ -172,7 +172,7 @@ describe('App', () => {
     expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
     expect(screen.getAllByText(/Chassis Setup Explained/).length).toBeGreaterThan(0)
     expect(screen.getByText('Transcript line one. Transcript line two.')).toBeInTheDocument()
-    expect(api.captureYouTubeTranscript).toHaveBeenCalled()
+    expect(api.captureTranscript).toHaveBeenCalled()
     expect(api.sendCaptureToMentor).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Send to Grok' }))
@@ -180,7 +180,7 @@ describe('App', () => {
     expect(api.sendCaptureToMentor).toHaveBeenCalledWith({
       title: 'Chassis Setup Explained',
       url: 'https://www.youtube.com/watch?v=abc123',
-      text: 'YouTube transcript captured manually.\n\nTranscript line one.\nTranscript line two.'
+      text: 'Video transcript captured manually.\n\nTranscript line one.\nTranscript line two.'
     })
   })
 
@@ -188,7 +188,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const { api, emitTabsChanged } = installImprovementMock()
 
-    vi.mocked(api.captureYouTubeTranscript).mockResolvedValueOnce({
+    vi.mocked(api.captureTranscript).mockResolvedValueOnce({
       type: 'unavailable',
       capturedAt: '2026-04-26T12:00:00.000Z',
       title: 'No Captions Video',
@@ -219,6 +219,45 @@ describe('App', () => {
     expect(await screen.findByText('Transcript unavailable')).toBeInTheDocument()
     expect(screen.getAllByText("Please click 'Show transcript' on the YouTube page first, then try again.").length).toBeGreaterThan(0)
     expect(api.sendCaptureToMentor).not.toHaveBeenCalled()
+  })
+
+  it('shows transcript capture controls on HPAcademy video pages', async () => {
+    const user = userEvent.setup()
+    const { api, emitTabsChanged } = installImprovementMock()
+
+    vi.mocked(api.captureTranscript).mockResolvedValueOnce({
+      type: 'captured',
+      capturedAt: '2026-04-26T12:00:00.000Z',
+      capture: {
+        title: 'EFI Tuning Fundamentals',
+        url: 'https://members.hpacademy.com/courses/efi-tuning/lessons/fuel-tables',
+        text: 'Welcome to this lesson.\nWe are going to tune the fuel table.'
+      }
+    })
+
+    render(<App />)
+
+    act(() =>
+      emitTabsChanged({
+        activeTabId: 'hpa-tab',
+        tabs: [
+          {
+            id: 'hpa-tab',
+            title: 'EFI Tuning Fundamentals',
+            url: 'https://members.hpacademy.com/courses/efi-tuning/lessons/fuel-tables',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false
+          }
+        ]
+      })
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Capture Transcript' }))
+
+    expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
+    expect(screen.getAllByText(/EFI Tuning Fundamentals/).length).toBeGreaterThan(0)
+    expect(screen.getByText('Welcome to this lesson. We are going to tune the fuel table.')).toBeInTheDocument()
   })
 
   it('saves session notes to local storage', async () => {
