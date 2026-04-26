@@ -12,6 +12,12 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
+import {
+  createPersistedTabState,
+  readPersistedTabState,
+  writePersistedTabState,
+  type PersistedTabState
+} from './tabPersistence'
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -36,6 +42,8 @@ let activeTabId: TabId | null = null
 let lastBrowserBounds: BrowserBounds | null = null
 let temporaryXaiApiKey: string | null = null
 let mentorBusy = false
+let isQuitting = false
+let hasSavedTabsForQuit = false
 const tabs = new Map<TabId, ManagedTab>()
 
 interface XaiChatMessage {
@@ -265,10 +273,27 @@ function getSnapshot(): TabsSnapshot {
   }
 }
 
+function getPersistableTabs(): ManagedTab[] {
+  return [...tabs.values()]
+}
+
 function broadcastTabs(): TabsSnapshot {
   const snapshot = getSnapshot()
   mainWindow?.webContents.send(ipcChannels.tabsChanged, snapshot)
   return snapshot
+}
+
+async function saveCurrentTabs(): Promise<void> {
+  const state = createPersistedTabState(
+    getPersistableTabs().map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      url: tab.url
+    })),
+    activeTabId
+  )
+
+  await writePersistedTabState(app.getPath('userData'), state)
 }
 
 function applyActiveViewBounds(): void {
@@ -381,6 +406,38 @@ function createTab(url = NEW_TAB_URL): TabsSnapshot {
   view.webContents.loadURL(resolveLoadUrl(tab.url))
 
   return broadcastTabs()
+}
+
+function restoreTabs(state: PersistedTabState | null): void {
+  const savedTabs = state?.tabs ?? []
+
+  if (savedTabs.length === 0) {
+    createTab()
+    return
+  }
+
+  let activeRestoredTabId: TabId | null = null
+
+  for (const savedTab of savedTabs) {
+    const beforeTabIds = new Set(tabs.keys())
+    createTab(savedTab.url)
+    const createdTabId = [...tabs.keys()].find((tabId) => !beforeTabIds.has(tabId)) ?? null
+    const createdTab = createdTabId ? tabs.get(createdTabId) : null
+
+    if (createdTab) {
+      createdTab.title = savedTab.title || 'New Tab'
+    }
+
+    if (savedTab.isActive) {
+      activeRestoredTabId = createdTabId
+    }
+  }
+
+  if (activeRestoredTabId) {
+    setActiveTab(activeRestoredTabId)
+  }
+
+  broadcastTabs()
 }
 
 function closeTab(tabId: TabId): TabsSnapshot {
@@ -615,14 +672,23 @@ function createMainWindow(): void {
     mainWindow = null
   })
 
+  mainWindow.on('close', () => {
+    if (!hasSavedTabsForQuit) {
+      void saveCurrentTabs().catch((error) => {
+        console.warn('Unable to save tab state before window close:', error)
+      })
+    }
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  mainWindow.webContents.once('did-finish-load', () => {
-    createTab()
+  mainWindow.webContents.once('did-finish-load', async () => {
+    const restoredState = await readPersistedTabState(app.getPath('userData'))
+    restoreTabs(restoredState)
   })
 }
 
@@ -684,6 +750,25 @@ app.whenReady().then(() => {
 
   createMainWindow()
 
+  app.on('before-quit', (event) => {
+    isQuitting = true
+
+    if (hasSavedTabsForQuit) {
+      return
+    }
+
+    event.preventDefault()
+
+    void saveCurrentTabs()
+      .catch((error) => {
+        console.warn('Unable to save tab state before quit:', error)
+      })
+      .finally(() => {
+        hasSavedTabsForQuit = true
+        app.quit()
+      })
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow()
@@ -692,7 +777,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' || isQuitting) {
     app.quit()
   }
 })
