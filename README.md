@@ -45,11 +45,10 @@ We believe that with the right guidance, structure, and tools, anyone can develo
 ## Current Status
 
 - High-level specification complete (`docs/SPEC.md`)
-- Desktop-first architecture (Windows, macOS, Linux)
+- Electron + React + TypeScript desktop shell created
+- Multi-tab browser prototype uses `WebContentsView` inside the center content rectangle
 - Mobile support planned for later
 - Website (improvement.app) will be completely redesigned
-
-We are in the early planning phase and actively refining scope and priorities.
 
 ---
 
@@ -63,12 +62,16 @@ This is the single source of truth for the Improvement project.
 
 ---
 
-## Getting Started (Coming Soon)
+## Getting Started
 
-Once development begins, this section will include:
-- How to run the app locally
-- Development setup instructions
-- How to contribute
+Install dependencies and run the desktop app:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+The current prototype starts with Wikipedia, supports multiple tabs, and keeps the React application as the main window shell while web pages load only in the center browser area.
 
 ---
 

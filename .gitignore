@@ -1,0 +1,7 @@
+node_modules
+.pnpm-store
+dist
+dist-electron
+out
+*.local
+.DS_Store
