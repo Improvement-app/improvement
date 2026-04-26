@@ -419,6 +419,33 @@ export default function App(): ReactElement {
                 />
               </section>
 
+              <section className="learning-actions-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Learning cells</h3>
+                    <span>Prompt starters for turning resources into practice.</span>
+                  </div>
+                </div>
+                <div className="learning-action-grid">
+                  <button type="button" onClick={() => setFollowUp('Explain this at my current technical level.')}>
+                    Explain
+                    <span>Clarify the concept</span>
+                  </button>
+                  <button type="button" onClick={() => setFollowUp('Create a simple visualization or diagram plan for this.')}>
+                    Visualize
+                    <span>Sketch the idea</span>
+                  </button>
+                  <button type="button" onClick={() => setFollowUp('Give me a hands-on practice exercise for this topic.')}>
+                    Practice
+                    <span>Apply it in the shop</span>
+                  </button>
+                  <button type="button" onClick={() => setFollowUp('Quiz me on the important details and assumptions.')}>
+                    Quiz
+                    <span>Check retention</span>
+                  </button>
+                </div>
+              </section>
+
               <section className="mentor-panel">
                 <div className="mentor-header">
                   <div>

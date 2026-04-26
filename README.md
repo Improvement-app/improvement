@@ -82,6 +82,12 @@ pnpm dev
 
 If `XAI_API_KEY` is not set, the right sidebar will show a temporary API key field. That key is passed to the Electron main process and kept in memory only for the current app session.
 
+Run the test suite:
+
+```bash
+pnpm test
+```
+
 ---
 
 ## Contributing

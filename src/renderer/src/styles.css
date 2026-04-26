@@ -287,6 +287,7 @@ h3 {
 .schedule-card,
 .visualizer-card,
 .notes-card,
+.learning-actions-card,
 .mentor-message,
 .api-key-form,
 .mentor-error {
@@ -536,6 +537,45 @@ textarea {
   min-height: 150px;
   margin: 0;
   background: #ffffff;
+}
+
+.learning-actions-card {
+  display: grid;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.learning-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.learning-action-grid button {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #f8fbff;
+  color: #172033;
+  cursor: pointer;
+  font-weight: 800;
+  text-align: left;
+}
+
+.learning-action-grid button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.learning-action-grid span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
 textarea:focus {
