@@ -1,6 +1,14 @@
 import type { FormEvent, ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { BrowserTab, CapturedSelection, MentorMessage, TabsSnapshot, TranscriptCaptureEvent, XaiStatus } from '../../shared/ipc'
+import type {
+  BrowserTab,
+  CapturedSelection,
+  MentorMessage,
+  RagResourceReference,
+  TabsSnapshot,
+  TranscriptCaptureEvent,
+  XaiStatus
+} from '../../shared/ipc'
 import type { CapturedResource } from '../../shared/resources'
 
 const initialSnapshot: TabsSnapshot = {
@@ -243,6 +251,8 @@ export default function App(): ReactElement {
   const [followUp, setFollowUp] = useState('')
   const [mentorError, setMentorError] = useState<string | null>(null)
   const [isMentorStreaming, setIsMentorStreaming] = useState(false)
+  const [ragStatus, setRagStatus] = useState<'idle' | 'searching' | 'ready'>('idle')
+  const [ragResources, setRagResources] = useState<RagResourceReference[]>([])
   const [notes, setNotes] = useState(() => window.localStorage.getItem('improvement.notes') ?? '')
   const [lastSavedAt, setLastSavedAt] = useState(() => window.localStorage.getItem('improvement.notesSavedAt'))
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -280,6 +290,12 @@ export default function App(): ReactElement {
     })
 
     const disposeMentorStream = window.improvement.onMentorStream((event) => {
+      if (event.type === 'context') {
+        setRagStatus(event.status)
+        setRagResources(event.resources)
+        return
+      }
+
       if (event.type === 'started') {
         setMentorError(null)
         setIsMentorStreaming(true)
@@ -488,6 +504,8 @@ export default function App(): ReactElement {
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
     setRightCollapsed(false)
     setMentorError(null)
+    setRagStatus('idle')
+    setRagResources([])
     setMentorMessages((messages) => [
       ...messages,
       {
@@ -518,6 +536,8 @@ export default function App(): ReactElement {
     }
 
     setMentorError(null)
+    setRagStatus('searching')
+    setRagResources([])
     setFollowUp('')
     setMentorMessages((messages) => [
       ...messages,
@@ -853,6 +873,21 @@ export default function App(): ReactElement {
                 )}
 
                 {mentorError && <div className="mentor-error">{mentorError}</div>}
+
+                {ragStatus !== 'idle' && (
+                  <div className="rag-context-card">
+                    <strong>
+                      {ragStatus === 'searching'
+                        ? 'Searching your knowledge base...'
+                        : ragResources.length > 0
+                          ? `Using ${ragResources.length} relevant ${ragResources.length === 1 ? 'resource' : 'resources'}`
+                          : 'No local resources matched this question'}
+                    </strong>
+                    {ragResources.length > 0 && (
+                      <span>{ragResources.map((resource) => resource.title).join(' · ')}</span>
+                    )}
+                  </div>
+                )}
 
                 <div className="mentor-messages" aria-live="polite">
                   {mentorMessages.length === 0 ? (

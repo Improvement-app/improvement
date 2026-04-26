@@ -9,6 +9,7 @@ import type {
   CapturedSelection,
   MentorMessage,
   MentorStreamEvent,
+  RagResourceReference,
   TabId,
   TabsSnapshot,
   TranscriptCaptureEvent,
@@ -618,6 +619,71 @@ function sendMentorEvent(event: MentorStreamEvent): void {
   mainWindow?.webContents.send(ipcChannels.mentorStream, event)
 }
 
+function excerptForQuery(resource: CapturedResource, query: string, maxLength = 900): string {
+  const normalized = resource.content.replace(/\s+/g, ' ').trim()
+
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+
+  const terms = query.toLowerCase().match(/[\p{L}\p{N}_-]{3,}/gu) ?? []
+  const lowerContent = normalized.toLowerCase()
+  const firstMatch = terms.map((term) => lowerContent.indexOf(term)).filter((index) => index >= 0).sort((a, b) => a - b)[0] ?? 0
+  const start = Math.max(0, firstMatch - Math.floor(maxLength / 3))
+  const end = Math.min(normalized.length, start + maxLength)
+  const prefix = start > 0 ? '...' : ''
+  const suffix = end < normalized.length ? '...' : ''
+
+  return `${prefix}${normalized.slice(start, end).trim()}${suffix}`
+}
+
+function ragReference(resource: CapturedResource): RagResourceReference {
+  return {
+    id: resource.id,
+    title: resource.title,
+    type: resource.type,
+    source: resource.source,
+    url: resource.url
+  }
+}
+
+async function buildPromptWithKnowledgeContext(userContent: string): Promise<string> {
+  sendMentorEvent({ type: 'context', status: 'searching', resources: [] })
+
+  const resources = await resourceRepository?.searchRelevant(userContent, 5) ?? []
+
+  sendMentorEvent({
+    type: 'context',
+    status: 'ready',
+    resources: resources.map(ragReference)
+  })
+
+  if (resources.length === 0) {
+    return userContent
+  }
+
+  const contextBlocks = resources.slice(0, 5).map((resource, index) =>
+    [
+      `[${index + 1}] ${resource.title} (${resource.type}, ${resource.source})`,
+      resource.url ? `URL: ${resource.url}` : null,
+      'Excerpt:',
+      excerptForQuery(resource, userContent)
+    ]
+      .filter(Boolean)
+      .join('\n')
+  )
+
+  return [
+    'The learner asked this question in Improvement:',
+    userContent,
+    '',
+    'Relevant local knowledge base context retrieved with SQLite FTS5:',
+    contextBlocks.join('\n\n'),
+    '',
+    'Use the local context when it is relevant. Cite sources inline as [1], [2], etc. when possible. If the context does not answer the question, say what is missing and answer from general knowledge only where appropriate.'
+  ].join('\n')
+}
+
 function buildCapturePrompt(capture: CapturedSelection): string {
   const transcriptExtractor = getTranscriptExtractor(capture.url)
   const isTranscriptCapture =
@@ -671,7 +737,7 @@ function rememberConversationMessage(message: XaiChatMessage): void {
   }
 }
 
-async function streamMentorResponse(userContent: string): Promise<void> {
+async function streamMentorResponse(userContent: string, options: { useKnowledgeBase?: boolean } = {}): Promise<void> {
   const { apiKey } = getXaiApiKey()
 
   if (!apiKey) {
@@ -691,18 +757,21 @@ async function streamMentorResponse(userContent: string): Promise<void> {
   }
 
   mentorBusy = true
-  rememberConversationMessage({ role: 'user', content: userContent })
-
-  const assistantMessage: MentorMessage = {
-    id: crypto.randomUUID(),
-    role: 'assistant',
-    content: '',
-    status: 'streaming'
-  }
-
-  sendMentorEvent({ type: 'started', message: assistantMessage })
+  let assistantMessage: MentorMessage | null = null
 
   try {
+    const promptContent = options.useKnowledgeBase ? await buildPromptWithKnowledgeContext(userContent) : userContent
+    rememberConversationMessage({ role: 'user', content: promptContent })
+
+    assistantMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      status: 'streaming'
+    }
+
+    sendMentorEvent({ type: 'started', message: assistantMessage })
+
     const response = await fetch(`${XAI_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -771,7 +840,7 @@ async function streamMentorResponse(userContent: string): Promise<void> {
     sendMentorEvent({ type: 'done', id: assistantMessage.id })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to reach xAI.'
-    sendMentorEvent({ type: 'error', id: assistantMessage.id, error: message })
+    sendMentorEvent({ type: 'error', id: assistantMessage?.id, error: message })
   } finally {
     mentorBusy = false
   }
@@ -870,7 +939,7 @@ app.whenReady().then(async () => {
       return
     }
 
-    await streamMentorResponse(trimmed)
+    await streamMentorResponse(trimmed, { useKnowledgeBase: true })
   })
   ipcMain.on(ipcChannels.setBrowserBounds, (_event, bounds: BrowserBounds) => {
     lastBrowserBounds = bounds

@@ -6,7 +6,7 @@ Last updated: April 26, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -22,11 +22,13 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube and HPAcademy extractors, and a registry/factory for selecting the right extractor by URL.
 - Unified `CapturedResource` model for transcripts, PDFs, articles, textbooks, notes, and future resource types.
 - SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
+- SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
 - Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
 - Transcript success/unavailable notices, a unified captured resource library, cleaned transcript reading view with optional timestamps, copy/delete controls, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
+- Phase 1 RAG for freeform Grok questions: the main process searches local resources with FTS5, adds the top relevant excerpts to the prompt, asks Grok to cite local sources when useful, and shows the renderer whether it is searching or using matching resources.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
 - Follow-up mentor conversation panel in the right sidebar.
 - Session notes area with local save support.
@@ -44,6 +46,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Tab persistence stores URL/title/active status only; full browser navigation history is not persisted.
 - Mentor conversation history is in-memory only and resets when the app closes.
 - Resource storage currently persists captured transcripts and imported PDFs; article, textbook, broader file-upload, and note ingestion flows are future work built on the same model.
+- Phase 1 RAG uses lexical FTS5 matching and excerpts rather than semantic vector embeddings.
 - Temporary xAI API keys are kept only in main-process memory for the current session.
 - New Tab search currently uses Google directly.
 - The Visualizer is a styled placeholder and does not yet generate diagrams.
@@ -63,7 +66,9 @@ Current test coverage includes:
 - Manual YouTube and HPAcademy transcript capture UI, captured transcript review, one-click Grok sending, and unavailable-state messaging.
 - Clean transcript resource rendering, timestamp toggling, and full transcript copying.
 - SQLite resource repository save/load, updates, search, type filtering, and deletion.
+- SQLite FTS5 relevant-resource search, including index synchronization on save/update/delete.
 - PDF filename cleanup and PDF resource browser-opening behavior.
+- Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.
 - Learning-cell prompt starter behavior.
 - Formatted mentor responses and copy-to-clipboard behavior.
@@ -74,6 +79,7 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 - Add article, textbook, broader file-upload, and persisted note capture flows using the `CapturedResource` model.
 - Persist notes and mentor sessions in the local-first database.
+- Add vector embeddings and chunk-level semantic retrieval alongside FTS5.
 - Add richer markdown rendering for notes and mentor responses.
 - Add real visualizer generation and saved learning artifacts.
 - Add full browser history/session persistence across app restarts.

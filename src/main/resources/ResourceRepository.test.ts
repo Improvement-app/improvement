@@ -68,6 +68,49 @@ describe('ResourceRepository', () => {
     await expect(repository.getByType('transcript')).resolves.toEqual([transcript()])
   })
 
+  it('finds relevant resources with FTS5 ranking', async () => {
+    await repository.save(
+      transcript({
+        id: 'resource-1',
+        title: 'Brake Bias Fundamentals',
+        content: 'Brake bias changes how braking force is distributed between front and rear tires.'
+      })
+    )
+    await repository.save(
+      transcript({
+        id: 'resource-2',
+        title: 'Welding Reference',
+        content: 'MIG welding settings for thin sheet metal and fabrication practice.'
+      })
+    )
+    await repository.save(
+      transcript({
+        id: 'resource-3',
+        title: 'Suspension Notes',
+        content: 'Roll center migration affects lateral load transfer and chassis balance.'
+      })
+    )
+
+    await expect(repository.searchRelevant('How should I think about brake bias?', 2)).resolves.toMatchObject([
+      {
+        id: 'resource-1',
+        title: 'Brake Bias Fundamentals'
+      }
+    ])
+  })
+
+  it('keeps FTS5 index synchronized on update and delete', async () => {
+    await repository.save(transcript({ content: 'Initial note about anti-roll bars.' }))
+    await expect(repository.searchRelevant('anti-roll')).resolves.toHaveLength(1)
+
+    await repository.save(transcript({ content: 'Updated note about brake proportioning valves.' }))
+    await expect(repository.searchRelevant('anti-roll')).resolves.toHaveLength(0)
+    await expect(repository.searchRelevant('proportioning')).resolves.toHaveLength(1)
+
+    await repository.delete('resource-1')
+    await expect(repository.searchRelevant('proportioning')).resolves.toHaveLength(0)
+  })
+
   it('deletes resources', async () => {
     await repository.save(transcript())
     await repository.delete('resource-1')

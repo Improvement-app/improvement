@@ -90,6 +90,32 @@ export class ResourceRepository {
     return rows.map((row) => this.fromRow(row))
   }
 
+  async searchRelevant(query: string, limit = 5): Promise<CapturedResource[]> {
+    const ftsQuery = this.toFtsQuery(query)
+
+    if (!ftsQuery) {
+      return []
+    }
+
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT resources.*
+           FROM resources_fts
+           JOIN resources ON resources.rowid = resources_fts.rowid
+           WHERE resources_fts MATCH @query
+           ORDER BY bm25(resources_fts, 5.0, 1.0)
+           LIMIT @limit`
+        )
+        .all({ query: ftsQuery, limit: Math.max(1, Math.min(limit, 20)) }) as ResourceRow[]
+
+      return rows.map((row) => this.fromRow(row))
+    } catch (error) {
+      console.warn('Unable to search captured resources with FTS5:', error)
+      return []
+    }
+  }
+
   async delete(id: string): Promise<void> {
     this.db.prepare('DELETE FROM resources WHERE id = ?').run(id)
   }
@@ -121,9 +147,33 @@ export class ResourceRepository {
       CREATE INDEX IF NOT EXISTS idx_resources_type ON resources(type);
       CREATE INDEX IF NOT EXISTS idx_resources_source ON resources(source);
       CREATE INDEX IF NOT EXISTS idx_resources_captured_at ON resources(captured_at);
+
+      -- FTS5 gives the Phase 1 RAG layer fast lexical retrieval over
+      -- local resources. It indexes title/content only and stores canonical
+      -- data in resources, so a future vector index can be added alongside it.
+      CREATE VIRTUAL TABLE IF NOT EXISTS resources_fts USING fts5(
+        title,
+        content,
+        content='resources',
+        content_rowid='rowid'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS resources_ai AFTER INSERT ON resources BEGIN
+        INSERT INTO resources_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS resources_ad AFTER DELETE ON resources BEGIN
+        INSERT INTO resources_fts(resources_fts, rowid, title, content) VALUES ('delete', old.rowid, old.title, old.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS resources_au AFTER UPDATE ON resources BEGIN
+        INSERT INTO resources_fts(resources_fts, rowid, title, content) VALUES ('delete', old.rowid, old.title, old.content);
+        INSERT INTO resources_fts(rowid, title, content) VALUES (new.rowid, new.title, new.content);
+      END;
     `)
 
     this.migrateLegacyTranscripts()
+    this.db.prepare("INSERT INTO resources_fts(resources_fts) VALUES ('rebuild')").run()
   }
 
   private migrateLegacyTranscripts(): void {
@@ -207,5 +257,15 @@ export class ResourceRepository {
     } catch {
       return []
     }
+  }
+
+  private toFtsQuery(query: string): string {
+    const terms = query
+      .toLowerCase()
+      .match(/[\p{L}\p{N}_]{2,}/gu)
+      ?.slice(0, 12)
+      .map((term) => `"${term.replace(/"/g, '""')}"`) ?? []
+
+    return [...new Set(terms)].join(' OR ')
   }
 }

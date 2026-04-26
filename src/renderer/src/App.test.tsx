@@ -415,4 +415,38 @@ describe('App', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('## Key Idea\n\n- Connect theory to fabrication\n- Check assumptions'))
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
+
+  it('shows knowledge base context used for mentor responses', async () => {
+    const { emitMentorStream } = installImprovementMock()
+
+    render(<App />)
+
+    act(() =>
+      emitMentorStream({
+        type: 'context',
+        status: 'searching',
+        resources: []
+      })
+    )
+
+    expect(screen.getByText('Searching your knowledge base...')).toBeInTheDocument()
+
+    act(() =>
+      emitMentorStream({
+        type: 'context',
+        status: 'ready',
+        resources: [
+          {
+            id: 'resource-1',
+            title: 'Brake Bias Fundamentals',
+            type: 'pdf',
+            source: 'file-upload'
+          }
+        ]
+      })
+    )
+
+    expect(screen.getByText('Using 1 relevant resource')).toBeInTheDocument()
+    expect(screen.getByText('Brake Bias Fundamentals')).toBeInTheDocument()
+  })
 })

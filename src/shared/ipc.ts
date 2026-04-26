@@ -62,11 +62,20 @@ export interface XaiStatus {
   model: string
 }
 
+export interface RagResourceReference {
+  id: string
+  title: string
+  type: string
+  source: string
+  url?: string
+}
+
 export type MentorStreamEvent =
   | { type: 'started'; message: MentorMessage }
   | { type: 'delta'; id: string; delta: string }
   | { type: 'done'; id: string }
   | { type: 'error'; id?: string; error: string }
+  | { type: 'context'; status: 'searching' | 'ready'; resources: RagResourceReference[] }
 
 export interface RendererApi {
   createTab: (url?: string) => Promise<TabsSnapshot>
