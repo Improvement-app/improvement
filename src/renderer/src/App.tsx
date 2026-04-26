@@ -27,6 +27,17 @@ function formatAddress(url: string): string {
   return url === 'improvement://new-tab' ? '' : url
 }
 
+function isYouTubeWatchPage(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.replace(/^www\./, '')
+
+    return (hostname === 'youtube.com' || hostname === 'm.youtube.com') && parsed.pathname === '/watch' && Boolean(parsed.searchParams.get('v'))
+  } catch {
+    return false
+  }
+}
+
 function formatSavedTime(value: string | null): string {
   if (!value) {
     return 'Not saved yet'
@@ -91,8 +102,11 @@ export default function App(): ReactElement {
   const [lastSavedAt, setLastSavedAt] = useState(() => window.localStorage.getItem('improvement.notesSavedAt'))
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const [transcriptNotice, setTranscriptNotice] = useState<TranscriptCaptureEvent | null>(null)
+  const [capturedTranscripts, setCapturedTranscripts] = useState<CapturedSelection[]>([])
+  const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
+  const canCaptureTranscript = Boolean(activeTab && isYouTubeWatchPage(activeTab.url))
 
   useEffect(() => {
     window.improvement.getXaiStatus().then(setXaiStatus).catch(() => {
@@ -109,10 +123,6 @@ export default function App(): ReactElement {
 
     const disposeSelections = window.improvement.onSelectionCaptured((selection) => {
       void sendCaptureToMentor(selection)
-    })
-
-    const disposeTranscriptCapture = window.improvement.onTranscriptCapture((event) => {
-      void handleTranscriptCapture(event)
     })
 
     const disposeMentorStream = window.improvement.onMentorStream((event) => {
@@ -154,7 +164,6 @@ export default function App(): ReactElement {
     return () => {
       disposeTabs()
       disposeSelections()
-      disposeTranscriptCapture()
       disposeMentorStream()
     }
   }, [])
@@ -227,14 +236,39 @@ export default function App(): ReactElement {
 
     if (event.type === 'captured') {
       setMentorError(null)
-      await sendCaptureToMentor({
-        ...event.capture,
-        text: `YouTube transcript captured automatically.\n\n${event.capture.text}`
-      })
+      setCapturedTranscripts((transcripts) => [event.capture, ...transcripts])
       return
     }
 
     setMentorError(event.reason)
+  }
+
+  const captureTranscript = async (): Promise<void> => {
+    setRightCollapsed(false)
+    setMentorError(null)
+    setIsCapturingTranscript(true)
+
+    try {
+      await handleTranscriptCapture(await window.improvement.captureYouTubeTranscript())
+    } catch {
+      const event: TranscriptCaptureEvent = {
+        type: 'unavailable',
+        capturedAt: new Date().toISOString(),
+        title: activeTab?.title || 'YouTube video',
+        url: activeTab?.url || '',
+        reason: 'Unable to capture the transcript from the current page.'
+      }
+      await handleTranscriptCapture(event)
+    } finally {
+      setIsCapturingTranscript(false)
+    }
+  }
+
+  const sendTranscriptToGrok = async (transcript: CapturedSelection): Promise<void> => {
+    await sendCaptureToMentor({
+      ...transcript,
+      text: `YouTube transcript captured manually.\n\n${transcript.text}`
+    })
   }
 
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
@@ -405,6 +439,11 @@ export default function App(): ReactElement {
               />
               <button type="submit">Go</button>
             </form>
+            {canCaptureTranscript && (
+              <button type="button" className="capture-transcript-button" onClick={() => void captureTranscript()} disabled={isCapturingTranscript}>
+                {isCapturingTranscript ? 'Capturing...' : 'Capture Transcript'}
+              </button>
+            )}
           </div>
           <div ref={browserFrameRef} className="browser-frame">
             {!activeTab && <div className="browser-empty">Creating your first browser tab...</div>}
@@ -435,9 +474,36 @@ export default function App(): ReactElement {
                   </div>
                   <p>
                     {transcriptNotice.type === 'captured'
-                      ? 'The YouTube transcript was sent to the Grok mentor workspace automatically.'
+                      ? 'The YouTube transcript is ready in the workspace. Review it, then send it to Grok when you are ready.'
                       : transcriptNotice.reason}
                   </p>
+                </section>
+              )}
+
+              {capturedTranscripts.length > 0 && (
+                <section className="captured-transcripts-card">
+                  <div className="card-header">
+                    <div>
+                      <h3>Captured transcripts</h3>
+                      <span>{capturedTranscripts.length} saved this session</span>
+                    </div>
+                  </div>
+                  <div className="captured-transcript-list">
+                    {capturedTranscripts.map((transcript, index) => (
+                      <article key={`${transcript.url}-${index}`} className="captured-transcript">
+                        <div className="message-header">
+                          <div>
+                            <strong>{transcript.title || 'YouTube transcript'}</strong>
+                            <span>{formatHostname(transcript.url)}</span>
+                          </div>
+                          <button type="button" onClick={() => void sendTranscriptToGrok(transcript)}>
+                            Send to Grok
+                          </button>
+                        </div>
+                        <pre>{transcript.text}</pre>
+                      </article>
+                    ))}
+                  </div>
                 </section>
               )}
 

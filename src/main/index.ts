@@ -9,6 +9,7 @@ import type {
   MentorStreamEvent,
   TabId,
   TabsSnapshot,
+  TranscriptCaptureEvent,
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
@@ -36,8 +37,6 @@ interface ManagedTab {
   title: string
   url: string
   isLoading: boolean
-  lastTranscriptCaptureUrl: string | null
-  transcriptCaptureTimer: NodeJS.Timeout | null
 }
 
 let mainWindow: ElectronBrowserWindow | null = null
@@ -286,11 +285,11 @@ function broadcastTabs(): TabsSnapshot {
   return snapshot
 }
 
-function sendTranscriptCaptureEvent(result: YouTubeTranscriptResult): void {
+function createTranscriptCaptureEvent(result: YouTubeTranscriptResult): TranscriptCaptureEvent {
   const capturedAt = new Date().toISOString()
 
   if (result.ok) {
-    mainWindow?.webContents.send(ipcChannels.transcriptCapture, {
+    return {
       type: 'captured',
       capturedAt,
       capture: {
@@ -298,52 +297,41 @@ function sendTranscriptCaptureEvent(result: YouTubeTranscriptResult): void {
         url: result.url,
         text: result.text
       }
-    })
-    return
+    }
   }
 
-  mainWindow?.webContents.send(ipcChannels.transcriptCapture, {
+  return {
     type: 'unavailable',
     capturedAt,
     title: result.title,
     url: result.url,
     reason: result.reason
-  })
+  }
 }
 
-function scheduleYouTubeTranscriptCapture(tab: ManagedTab): void {
-  if (!isYouTubeWatchUrl(tab.url) || tab.lastTranscriptCaptureUrl === tab.url) {
-    return
+async function captureActiveYouTubeTranscript(): Promise<TranscriptCaptureEvent> {
+  const tab = activeTabId ? tabs.get(activeTabId) : null
+
+  if (!tab || !isYouTubeWatchUrl(tab.url)) {
+    return createTranscriptCaptureEvent({
+      ok: false,
+      title: tab?.title || 'Current page',
+      url: tab?.url || '',
+      reason: 'Open a YouTube video page before capturing a transcript.'
+    })
   }
 
-  if (tab.transcriptCaptureTimer) {
-    clearTimeout(tab.transcriptCaptureTimer)
+  try {
+    const result = (await tab.view.webContents.executeJavaScript(createYouTubeTranscriptScript(), true)) as YouTubeTranscriptResult
+    return createTranscriptCaptureEvent(result)
+  } catch (error) {
+    return createTranscriptCaptureEvent({
+      ok: false,
+      title: tab.title || 'YouTube video',
+      url: tab.url,
+      reason: error instanceof Error ? error.message : 'Unable to capture the YouTube transcript.'
+    })
   }
-
-  const captureUrl = tab.url
-  tab.transcriptCaptureTimer = setTimeout(() => {
-    tab.transcriptCaptureTimer = null
-
-    if (tab.url !== captureUrl || tab.view.webContents.isDestroyed()) {
-      return
-    }
-
-    tab.lastTranscriptCaptureUrl = captureUrl
-
-    void tab.view.webContents
-      .executeJavaScript(createYouTubeTranscriptScript(), true)
-      .then((result: YouTubeTranscriptResult) => {
-        sendTranscriptCaptureEvent(result)
-      })
-      .catch((error) => {
-        sendTranscriptCaptureEvent({
-          ok: false,
-          title: tab.title || 'YouTube video',
-          url: captureUrl,
-          reason: error instanceof Error ? error.message : 'Unable to capture the YouTube transcript.'
-        })
-      })
-  }, 3500)
 }
 
 async function saveCurrentTabs(): Promise<void> {
@@ -427,19 +415,16 @@ function attachTabEvents(tab: ManagedTab): void {
     tab.url = isNewTabUrl(currentUrl) ? NEW_TAB_URL : currentUrl
     tab.title = isNewTabUrl(currentUrl) ? 'New Tab' : webContents.getTitle() || tab.title
     broadcastTabs()
-    scheduleYouTubeTranscriptCapture(tab)
   })
 
   webContents.on('did-navigate', (_event: ElectronEvent, url: string) => {
     tab.url = isNewTabUrl(url) ? NEW_TAB_URL : url
     broadcastTabs()
-    scheduleYouTubeTranscriptCapture(tab)
   })
 
   webContents.on('did-navigate-in-page', (_event: ElectronEvent, url: string) => {
     tab.url = isNewTabUrl(url) ? NEW_TAB_URL : url
     broadcastTabs()
-    scheduleYouTubeTranscriptCapture(tab)
   })
 }
 
@@ -463,9 +448,7 @@ function createTab(url = NEW_TAB_URL): TabsSnapshot {
     view,
     title: 'New Tab',
     url: normalizeUrl(url),
-    isLoading: false,
-    lastTranscriptCaptureUrl: null,
-    transcriptCaptureTimer: null
+    isLoading: false
   }
 
   tabs.set(id, tab)
@@ -521,10 +504,6 @@ function closeTab(tabId: TabId): TabsSnapshot {
 
   if (activeTabId === tabId) {
     mainWindow.contentView.removeChildView(tab.view)
-  }
-
-  if (tab.transcriptCaptureTimer) {
-    clearTimeout(tab.transcriptCaptureTimer)
   }
 
   tab.view.webContents.close()
@@ -585,17 +564,19 @@ function sendMentorEvent(event: MentorStreamEvent): void {
 }
 
 function buildCapturePrompt(capture: CapturedSelection): string {
-  const isYouTubeTranscript = isYouTubeWatchUrl(capture.url) && capture.text.startsWith('YouTube transcript captured automatically.')
+  const isYouTubeTranscript =
+    isYouTubeWatchUrl(capture.url) &&
+    (capture.text.startsWith('YouTube transcript captured manually.') || capture.text.startsWith('YouTube transcript captured automatically.'))
 
   if (isYouTubeTranscript) {
     return [
-      'The learner watched a YouTube video and Improvement automatically captured the transcript.',
+      'The learner watched a YouTube video and captured the transcript in Improvement.',
       '',
       `Video title: ${capture.title || 'Untitled YouTube video'}`,
       `URL: ${capture.url}`,
       '',
       'Transcript:',
-      capture.text.replace(/^YouTube transcript captured automatically\.\n\n/, ''),
+      capture.text.replace(/^YouTube transcript captured (manually|automatically)\.\n\n/, ''),
       '',
       'Summarize the video for a serious adult technical learner. Extract the key concepts, explain practical engineering or fabrication relevance when useful, identify assumptions or gaps, and suggest follow-up practice questions.'
     ].join('\n')
@@ -813,6 +794,7 @@ app.whenReady().then(() => {
     temporaryXaiApiKey = trimmed.length > 0 ? trimmed : null
     return getXaiStatus()
   })
+  ipcMain.handle(ipcChannels.captureYouTubeTranscript, () => captureActiveYouTubeTranscript())
   ipcMain.handle(ipcChannels.sendCaptureToMentor, async (_event, capture: CapturedSelection) => {
     await streamMentorResponse(buildCapturePrompt(capture))
   })

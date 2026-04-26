@@ -26,9 +26,7 @@ export function isYouTubeWatchUrl(url: string): boolean {
 }
 
 export function createYouTubeTranscriptScript(): string {
-  return `(${async function captureYouTubeTranscript(): Promise<YouTubeTranscriptResult> {
-    const sleep = (ms: number): Promise<void> => new Promise((resolve) => window.setTimeout(resolve, ms))
-
+  return `(${function captureYouTubeTranscript(): YouTubeTranscriptResult {
     function getTitle(): string {
       return (
         document.querySelector('h1.ytd-watch-metadata yt-formatted-string')?.textContent?.trim() ||
@@ -53,68 +51,18 @@ export function createYouTubeTranscriptScript(): string {
       return Array.from(new Set(segments)).join('\\n')
     }
 
-    async function clickShowTranscript(): Promise<boolean> {
-      const buttons = Array.from(document.querySelectorAll('button, yt-button-shape button, ytd-button-renderer button'))
-
-      const transcriptButton = buttons.find((button) => {
-        const text = button.textContent?.replace(/\\s+/g, ' ').trim().toLowerCase() ?? ''
-        const label = button.getAttribute('aria-label')?.toLowerCase() ?? ''
-        return text.includes('show transcript') || label.includes('show transcript') || text === 'transcript'
-      }) as HTMLElement | undefined
-
-      if (transcriptButton) {
-        transcriptButton.click()
-        return true
-      }
-
-      const expanders = Array.from(document.querySelectorAll('tp-yt-paper-button, button, yt-button-shape button')) as HTMLElement[]
-      const moreButton = expanders.find((button) => {
-        const text = button.textContent?.replace(/\\s+/g, ' ').trim().toLowerCase() ?? ''
-        const label = button.getAttribute('aria-label')?.toLowerCase() ?? ''
-        return text === 'more' || label.includes('more')
-      })
-
-      moreButton?.click()
-      await sleep(900)
-
-      const expandedButtons = Array.from(document.querySelectorAll('button, yt-button-shape button, ytd-button-renderer button')) as HTMLElement[]
-      const expandedTranscriptButton = expandedButtons.find((button) => {
-        const text = button.textContent?.replace(/\\s+/g, ' ').trim().toLowerCase() ?? ''
-        const label = button.getAttribute('aria-label')?.toLowerCase() ?? ''
-        return text.includes('show transcript') || label.includes('show transcript') || text === 'transcript'
-      })
-
-      if (expandedTranscriptButton) {
-        expandedTranscriptButton.click()
-        return true
-      }
-
-      return false
-    }
-
     const title = getTitle()
     const url = window.location.href
 
     try {
-      let transcriptText = getTranscriptText()
-
-      if (!transcriptText) {
-        await clickShowTranscript()
-        for (let index = 0; index < 10; index += 1) {
-          await sleep(700)
-          transcriptText = getTranscriptText()
-          if (transcriptText) {
-            break
-          }
-        }
-      }
+      const transcriptText = getTranscriptText()
 
       if (!transcriptText) {
         return {
           ok: false,
           title,
           url,
-          reason: 'No transcript was found for this YouTube video, or YouTube did not expose the transcript panel.'
+          reason: "Please click 'Show transcript' on the YouTube page first, then try again."
         }
       }
 

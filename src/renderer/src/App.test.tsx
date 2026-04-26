@@ -59,6 +59,15 @@ function installImprovementMock(): ImprovementMock {
       source: 'temporary',
       model: 'grok-4'
     }),
+    captureYouTubeTranscript: vi.fn().mockResolvedValue({
+      type: 'captured',
+      capturedAt: '2026-04-26T12:00:00.000Z',
+      capture: {
+        title: 'Chassis Setup Explained',
+        url: 'https://www.youtube.com/watch?v=abc123',
+        text: 'Transcript line one.\nTranscript line two.'
+      }
+    }),
     sendCaptureToMentor: vi.fn().mockResolvedValue(undefined),
     sendMentorMessage: vi.fn().mockResolvedValue(undefined),
     onTabsChanged: vi.fn((callback) => {
@@ -134,49 +143,81 @@ describe('App', () => {
     expect(api.sendCaptureToMentor).toHaveBeenCalledWith(selection)
   })
 
-  it('shows automatic YouTube transcript captures and sends them to the mentor', async () => {
-    const { api, emitTranscriptCapture } = installImprovementMock()
+  it('shows manual YouTube transcript captures and sends them to Grok on request', async () => {
+    const user = userEvent.setup()
+    const { api, emitTabsChanged } = installImprovementMock()
 
     render(<App />)
 
+    expect(screen.queryByRole('button', { name: 'Capture Transcript' })).not.toBeInTheDocument()
+
     act(() =>
-      emitTranscriptCapture({
-        type: 'captured',
-        capturedAt: '2026-04-26T12:00:00.000Z',
-        capture: {
-          title: 'Chassis Setup Explained',
-          url: 'https://www.youtube.com/watch?v=abc123',
-          text: 'Transcript line one.\nTranscript line two.'
-        }
+      emitTabsChanged({
+        activeTabId: 'youtube-tab',
+        tabs: [
+          {
+            id: 'youtube-tab',
+            title: 'Chassis Setup Explained',
+            url: 'https://www.youtube.com/watch?v=abc123',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false
+          }
+        ]
       })
     )
+
+    await user.click(screen.getByRole('button', { name: 'Capture Transcript' }))
 
     expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
     expect(screen.getAllByText(/Chassis Setup Explained/).length).toBeGreaterThan(0)
+    expect(screen.getByText('Transcript line one. Transcript line two.')).toBeInTheDocument()
+    expect(api.captureYouTubeTranscript).toHaveBeenCalled()
+    expect(api.sendCaptureToMentor).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Send to Grok' }))
+
     expect(api.sendCaptureToMentor).toHaveBeenCalledWith({
       title: 'Chassis Setup Explained',
       url: 'https://www.youtube.com/watch?v=abc123',
-      text: 'YouTube transcript captured automatically.\n\nTranscript line one.\nTranscript line two.'
+      text: 'YouTube transcript captured manually.\n\nTranscript line one.\nTranscript line two.'
     })
   })
 
-  it('shows a clear message when a YouTube transcript is unavailable', async () => {
-    const { api, emitTranscriptCapture } = installImprovementMock()
+  it('shows a clear message when the YouTube transcript panel is not open', async () => {
+    const user = userEvent.setup()
+    const { api, emitTabsChanged } = installImprovementMock()
+
+    vi.mocked(api.captureYouTubeTranscript).mockResolvedValueOnce({
+      type: 'unavailable',
+      capturedAt: '2026-04-26T12:00:00.000Z',
+      title: 'No Captions Video',
+      url: 'https://www.youtube.com/watch?v=nope',
+      reason: "Please click 'Show transcript' on the YouTube page first, then try again."
+    })
 
     render(<App />)
 
     act(() =>
-      emitTranscriptCapture({
-        type: 'unavailable',
-        capturedAt: '2026-04-26T12:00:00.000Z',
-        title: 'No Captions Video',
-        url: 'https://www.youtube.com/watch?v=nope',
-        reason: 'No transcript was found for this YouTube video.'
+      emitTabsChanged({
+        activeTabId: 'youtube-tab',
+        tabs: [
+          {
+            id: 'youtube-tab',
+            title: 'No Captions Video',
+            url: 'https://www.youtube.com/watch?v=nope',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false
+          }
+        ]
       })
     )
 
+    await user.click(screen.getByRole('button', { name: 'Capture Transcript' }))
+
     expect(await screen.findByText('Transcript unavailable')).toBeInTheDocument()
-    expect(screen.getAllByText('No transcript was found for this YouTube video.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Please click 'Show transcript' on the YouTube page first, then try again.").length).toBeGreaterThan(0)
     expect(api.sendCaptureToMentor).not.toHaveBeenCalled()
   })
 

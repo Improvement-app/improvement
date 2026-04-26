@@ -6,7 +6,7 @@ Last updated: April 26, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", automatic YouTube transcript capture, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration, webpage text capture via "Send to AI", manual YouTube transcript capture, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, captured transcript review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -17,8 +17,8 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Internal New Tab page at `improvement://new-tab` with search and technical learning resource links.
 - New-window interception so `target="_blank"` and `window.open()` open as internal app tabs.
 - Webpage text selection capture with floating "Send to AI" button.
-- Automatic YouTube watch-page detection with transcript capture via `webContents.executeJavaScript()`.
-- YouTube transcript success/unavailable notices in the learning workspace.
+- Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages.
+- YouTube transcript success/unavailable notices, captured transcript history for the current session, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
 - Follow-up mentor conversation panel in the right sidebar.
@@ -28,7 +28,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Vitest + Testing Library setup for renderer workflow tests.
 - Tests covering tab interactions, "Send to AI" capture routing, note saving, learning-cell prompt starters, and formatted/copyable mentor responses.
 - Tests covering tab persistence serialization, file read/write, active-tab restoration data, and corrupted/missing state handling.
-- Tests covering YouTube watch URL detection, transcript extraction script generation, transcript success routing, and unavailable transcript messaging.
+- Tests covering YouTube watch URL detection, manual transcript extraction script generation, transcript capture UI, one-click Grok sending, and unavailable transcript messaging.
 - Electron dev launcher that removes `ELECTRON_RUN_AS_NODE` before running `electron-vite`.
 
 ## Current Limitations
@@ -40,7 +40,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - New Tab search currently uses Google directly.
 - The Visualizer is a styled placeholder and does not yet generate diagrams.
 - Webpage capture depends on preload injection and may not work inside some iframes or heavily restricted pages.
-- YouTube transcript capture depends on YouTube's current DOM and may fail if transcripts are disabled, unavailable, or the page structure changes.
+- YouTube transcript capture depends on YouTube's current DOM and requires the user to open the transcript panel before clicking "Capture Transcript".
 - No packaged installer or auto-update flow exists yet.
 
 ## Testing Status
@@ -51,7 +51,7 @@ Current test coverage includes:
 - Browser tab rendering and tab management API calls.
 - Tab persistence serialization and user-data file handling.
 - Webpage selection capture routing into the Grok mentor panel.
-- Automatic YouTube transcript capture routing and unavailable-state messaging.
+- Manual YouTube transcript capture UI, captured transcript review, one-click Grok sending, and unavailable-state messaging.
 - Session notes saving to local storage.
 - Learning-cell prompt starter behavior.
 - Formatted mentor responses and copy-to-clipboard behavior.
@@ -64,7 +64,7 @@ Tests are now required for new features when appropriate, especially renderer wo
 - Add richer markdown rendering for notes and mentor responses.
 - Add real visualizer generation and saved learning artifacts.
 - Add full browser history/session persistence across app restarts.
-- Harden YouTube transcript capture with alternate caption sources if DOM extraction fails.
+- Add alternate caption-source capture for YouTube videos when DOM transcript extraction is unavailable.
 - Add task/schedule editing and local persistence.
 - Add broader test coverage for main-process tab management, New Tab page generation, and preload capture behavior.
 - Prepare packaging for macOS, Windows, and Linux.

@@ -18,7 +18,7 @@ describe('youtubeTranscript', () => {
   it('creates an extraction script for transcript capture', () => {
     const script = createYouTubeTranscriptScript()
 
-    expect(script).toContain('show transcript')
+    expect(script).toContain("Please click 'Show transcript'")
     expect(script).toContain('ytd-transcript-segment-renderer')
     expect(script).toContain('window.location.href')
   })
