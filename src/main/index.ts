@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron'
+import { app, BrowserWindow, ipcMain, session, WebContentsView } from 'electron'
 import type { BrowserWindow as ElectronBrowserWindow, Event as ElectronEvent, WebContentsView as ElectronWebContentsView } from 'electron'
 import { join } from 'node:path'
 import type {
@@ -24,6 +24,8 @@ import { createYouTubeTranscriptScript, isYouTubeWatchUrl, type YouTubeTranscrip
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
 const XAI_MODEL = process.env.XAI_MODEL || 'grok-4'
+const DESKTOP_CHROME_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 const MENTOR_SYSTEM_PROMPT = [
   'You are Improvement, an AI mentor for serious adult learners building deep technical mastery.',
   'The learner is often studying engineering theory, vehicle design, fabrication, CNC machining, welding, additive manufacturing, engines, or related hands-on trade skills.',
@@ -253,6 +255,11 @@ function resolveLoadUrl(url: string): string {
   return url
 }
 
+function configureBrowserSession(): void {
+  app.userAgentFallback = DESKTOP_CHROME_USER_AGENT
+  session.defaultSession.setUserAgent(DESKTOP_CHROME_USER_AGENT)
+}
+
 function tabFromWebContentsId(webContentsId: number): ManagedTab | undefined {
   return [...tabs.values()].find((tab) => tab.view.webContents.id === webContentsId)
 }
@@ -439,9 +446,13 @@ function createTab(url = NEW_TAB_URL): TabsSnapshot {
       preload: join(__dirname, '../preload/browser.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   })
+
+  view.webContents.setUserAgent(DESKTOP_CHROME_USER_AGENT)
 
   const tab: ManagedTab = {
     id,
@@ -454,7 +465,10 @@ function createTab(url = NEW_TAB_URL): TabsSnapshot {
   tabs.set(id, tab)
   attachTabEvents(tab)
   setActiveTab(id)
-  view.webContents.loadURL(resolveLoadUrl(tab.url))
+  view.webContents.loadURL(resolveLoadUrl(tab.url), {
+    userAgent: DESKTOP_CHROME_USER_AGENT,
+    extraHeaders: 'Accept-Language: en-US,en;q=0.9'
+  })
 
   return broadcastTabs()
 }
@@ -533,7 +547,10 @@ function navigateActiveTab(url: string): TabsSnapshot {
   }
 
   tab.url = normalizeUrl(url)
-  tab.view.webContents.loadURL(resolveLoadUrl(tab.url))
+  tab.view.webContents.loadURL(resolveLoadUrl(tab.url), {
+    userAgent: DESKTOP_CHROME_USER_AGENT,
+    extraHeaders: 'Accept-Language: en-US,en;q=0.9'
+  })
   return broadcastTabs()
 }
 
@@ -762,6 +779,8 @@ function createMainWindow(): void {
 }
 
 app.whenReady().then(() => {
+  configureBrowserSession()
+
   ipcMain.handle(ipcChannels.createTab, (_event, url?: string) => createTab(url))
   ipcMain.handle(ipcChannels.closeTab, (_event, tabId: TabId) => closeTab(tabId))
   ipcMain.handle(ipcChannels.switchTab, (_event, tabId: TabId) => {
