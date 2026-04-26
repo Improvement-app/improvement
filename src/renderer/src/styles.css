@@ -288,6 +288,7 @@ h3 {
 .visualizer-card,
 .notes-card,
 .learning-actions-card,
+.transcript-card,
 .mentor-message,
 .api-key-form,
 .mentor-error {
@@ -319,6 +320,42 @@ h3 {
   color: #667085;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.transcript-card {
+  display: grid;
+  gap: 8px;
+}
+
+.transcript-card.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.transcript-card.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.transcript-card strong,
+.transcript-card span {
+  display: block;
+}
+
+.transcript-card strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.transcript-card span,
+.transcript-card p {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.transcript-card p {
+  margin: 0;
 }
 
 .card-header,

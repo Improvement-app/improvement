@@ -18,6 +18,7 @@ import {
   writePersistedTabState,
   type PersistedTabState
 } from './tabPersistence'
+import { createYouTubeTranscriptScript, isYouTubeWatchUrl, type YouTubeTranscriptResult } from './youtubeTranscript'
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -35,6 +36,8 @@ interface ManagedTab {
   title: string
   url: string
   isLoading: boolean
+  lastTranscriptCaptureUrl: string | null
+  transcriptCaptureTimer: NodeJS.Timeout | null
 }
 
 let mainWindow: ElectronBrowserWindow | null = null
@@ -283,6 +286,66 @@ function broadcastTabs(): TabsSnapshot {
   return snapshot
 }
 
+function sendTranscriptCaptureEvent(result: YouTubeTranscriptResult): void {
+  const capturedAt = new Date().toISOString()
+
+  if (result.ok) {
+    mainWindow?.webContents.send(ipcChannels.transcriptCapture, {
+      type: 'captured',
+      capturedAt,
+      capture: {
+        title: result.title,
+        url: result.url,
+        text: result.text
+      }
+    })
+    return
+  }
+
+  mainWindow?.webContents.send(ipcChannels.transcriptCapture, {
+    type: 'unavailable',
+    capturedAt,
+    title: result.title,
+    url: result.url,
+    reason: result.reason
+  })
+}
+
+function scheduleYouTubeTranscriptCapture(tab: ManagedTab): void {
+  if (!isYouTubeWatchUrl(tab.url) || tab.lastTranscriptCaptureUrl === tab.url) {
+    return
+  }
+
+  if (tab.transcriptCaptureTimer) {
+    clearTimeout(tab.transcriptCaptureTimer)
+  }
+
+  const captureUrl = tab.url
+  tab.transcriptCaptureTimer = setTimeout(() => {
+    tab.transcriptCaptureTimer = null
+
+    if (tab.url !== captureUrl || tab.view.webContents.isDestroyed()) {
+      return
+    }
+
+    tab.lastTranscriptCaptureUrl = captureUrl
+
+    void tab.view.webContents
+      .executeJavaScript(createYouTubeTranscriptScript(), true)
+      .then((result: YouTubeTranscriptResult) => {
+        sendTranscriptCaptureEvent(result)
+      })
+      .catch((error) => {
+        sendTranscriptCaptureEvent({
+          ok: false,
+          title: tab.title || 'YouTube video',
+          url: captureUrl,
+          reason: error instanceof Error ? error.message : 'Unable to capture the YouTube transcript.'
+        })
+      })
+  }, 3500)
+}
+
 async function saveCurrentTabs(): Promise<void> {
   const state = createPersistedTabState(
     getPersistableTabs().map((tab) => ({
@@ -364,16 +427,19 @@ function attachTabEvents(tab: ManagedTab): void {
     tab.url = isNewTabUrl(currentUrl) ? NEW_TAB_URL : currentUrl
     tab.title = isNewTabUrl(currentUrl) ? 'New Tab' : webContents.getTitle() || tab.title
     broadcastTabs()
+    scheduleYouTubeTranscriptCapture(tab)
   })
 
   webContents.on('did-navigate', (_event: ElectronEvent, url: string) => {
     tab.url = isNewTabUrl(url) ? NEW_TAB_URL : url
     broadcastTabs()
+    scheduleYouTubeTranscriptCapture(tab)
   })
 
   webContents.on('did-navigate-in-page', (_event: ElectronEvent, url: string) => {
     tab.url = isNewTabUrl(url) ? NEW_TAB_URL : url
     broadcastTabs()
+    scheduleYouTubeTranscriptCapture(tab)
   })
 }
 
@@ -397,7 +463,9 @@ function createTab(url = NEW_TAB_URL): TabsSnapshot {
     view,
     title: 'New Tab',
     url: normalizeUrl(url),
-    isLoading: false
+    isLoading: false,
+    lastTranscriptCaptureUrl: null,
+    transcriptCaptureTimer: null
   }
 
   tabs.set(id, tab)
@@ -453,6 +521,10 @@ function closeTab(tabId: TabId): TabsSnapshot {
 
   if (activeTabId === tabId) {
     mainWindow.contentView.removeChildView(tab.view)
+  }
+
+  if (tab.transcriptCaptureTimer) {
+    clearTimeout(tab.transcriptCaptureTimer)
   }
 
   tab.view.webContents.close()
@@ -513,6 +585,22 @@ function sendMentorEvent(event: MentorStreamEvent): void {
 }
 
 function buildCapturePrompt(capture: CapturedSelection): string {
+  const isYouTubeTranscript = isYouTubeWatchUrl(capture.url) && capture.text.startsWith('YouTube transcript captured automatically.')
+
+  if (isYouTubeTranscript) {
+    return [
+      'The learner watched a YouTube video and Improvement automatically captured the transcript.',
+      '',
+      `Video title: ${capture.title || 'Untitled YouTube video'}`,
+      `URL: ${capture.url}`,
+      '',
+      'Transcript:',
+      capture.text.replace(/^YouTube transcript captured automatically\.\n\n/, ''),
+      '',
+      'Summarize the video for a serious adult technical learner. Extract the key concepts, explain practical engineering or fabrication relevance when useful, identify assumptions or gaps, and suggest follow-up practice questions.'
+    ].join('\n')
+  }
+
   return [
     'The learner selected this web content and clicked "Send to AI".',
     '',

@@ -27,6 +27,20 @@ export interface CapturedSelection {
   title: string
 }
 
+export type TranscriptCaptureEvent =
+  | {
+      type: 'captured'
+      capture: CapturedSelection
+      capturedAt: string
+    }
+  | {
+      type: 'unavailable'
+      title: string
+      url: string
+      reason: string
+      capturedAt: string
+    }
+
 export type MentorMessageRole = 'user' | 'assistant' | 'system'
 
 export interface MentorMessage {
@@ -67,6 +81,7 @@ export interface RendererApi {
   sendMentorMessage: (message: string) => Promise<void>
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => () => void
   onSelectionCaptured: (callback: (selection: CapturedSelection) => void) => () => void
+  onTranscriptCapture: (callback: (event: TranscriptCaptureEvent) => void) => () => void
   onMentorStream: (callback: (event: MentorStreamEvent) => void) => () => void
 }
 
@@ -86,5 +101,6 @@ export const ipcChannels = {
   setTemporaryXaiApiKey: 'xai:set-temporary-api-key',
   sendCaptureToMentor: 'mentor:send-capture',
   sendMentorMessage: 'mentor:send-message',
-  mentorStream: 'mentor:stream'
+  mentorStream: 'mentor:stream',
+  transcriptCapture: 'transcript:capture'
 } as const

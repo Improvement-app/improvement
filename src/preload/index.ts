@@ -5,7 +5,8 @@ import type {
   MentorStreamEvent,
   RendererApi,
   TabId,
-  TabsSnapshot
+  TabsSnapshot,
+  TranscriptCaptureEvent
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
 
@@ -33,6 +34,11 @@ const api: RendererApi = {
     const listener = (_event: Electron.IpcRendererEvent, selection: CapturedSelection) => callback(selection)
     ipcRenderer.on(ipcChannels.selectionCaptured, listener)
     return () => ipcRenderer.removeListener(ipcChannels.selectionCaptured, listener)
+  },
+  onTranscriptCapture: (callback: (event: TranscriptCaptureEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, transcriptEvent: TranscriptCaptureEvent) => callback(transcriptEvent)
+    ipcRenderer.on(ipcChannels.transcriptCapture, listener)
+    return () => ipcRenderer.removeListener(ipcChannels.transcriptCapture, listener)
   },
   onMentorStream: (callback: (event: MentorStreamEvent) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, streamEvent: MentorStreamEvent) => callback(streamEvent)

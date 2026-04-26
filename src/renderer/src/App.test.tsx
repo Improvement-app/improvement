@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { CapturedSelection, MentorStreamEvent, RendererApi, TabsSnapshot } from '../../shared/ipc'
+import type { CapturedSelection, MentorStreamEvent, RendererApi, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
 
 const tabsSnapshot: TabsSnapshot = {
   activeTabId: 'tab-1',
@@ -30,12 +30,14 @@ interface ImprovementMock {
   api: RendererApi
   emitTabsChanged: (snapshot: TabsSnapshot) => void
   emitSelectionCaptured: (selection: CapturedSelection) => void
+  emitTranscriptCapture: (event: TranscriptCaptureEvent) => void
   emitMentorStream: (event: MentorStreamEvent) => void
 }
 
 function installImprovementMock(): ImprovementMock {
   let tabsChanged: ((snapshot: TabsSnapshot) => void) | null = null
   let selectionCaptured: ((selection: CapturedSelection) => void) | null = null
+  let transcriptCapture: ((event: TranscriptCaptureEvent) => void) | null = null
   let mentorStream: ((event: MentorStreamEvent) => void) | null = null
 
   const api: RendererApi = {
@@ -67,6 +69,10 @@ function installImprovementMock(): ImprovementMock {
       selectionCaptured = callback
       return vi.fn()
     }),
+    onTranscriptCapture: vi.fn((callback) => {
+      transcriptCapture = callback
+      return vi.fn()
+    }),
     onMentorStream: vi.fn((callback) => {
       mentorStream = callback
       return vi.fn()
@@ -82,6 +88,7 @@ function installImprovementMock(): ImprovementMock {
     api,
     emitTabsChanged: (snapshot) => tabsChanged?.(snapshot),
     emitSelectionCaptured: (selection) => selectionCaptured?.(selection),
+    emitTranscriptCapture: (event) => transcriptCapture?.(event),
     emitMentorStream: (event) => mentorStream?.(event)
   }
 }
@@ -125,6 +132,52 @@ describe('App', () => {
     expect(await screen.findByText('Selected paragraph about aero balance.')).toBeInTheDocument()
     expect(screen.getByText(/Aero Article/)).toBeInTheDocument()
     expect(api.sendCaptureToMentor).toHaveBeenCalledWith(selection)
+  })
+
+  it('shows automatic YouTube transcript captures and sends them to the mentor', async () => {
+    const { api, emitTranscriptCapture } = installImprovementMock()
+
+    render(<App />)
+
+    act(() =>
+      emitTranscriptCapture({
+        type: 'captured',
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        capture: {
+          title: 'Chassis Setup Explained',
+          url: 'https://www.youtube.com/watch?v=abc123',
+          text: 'Transcript line one.\nTranscript line two.'
+        }
+      })
+    )
+
+    expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
+    expect(screen.getAllByText(/Chassis Setup Explained/).length).toBeGreaterThan(0)
+    expect(api.sendCaptureToMentor).toHaveBeenCalledWith({
+      title: 'Chassis Setup Explained',
+      url: 'https://www.youtube.com/watch?v=abc123',
+      text: 'YouTube transcript captured automatically.\n\nTranscript line one.\nTranscript line two.'
+    })
+  })
+
+  it('shows a clear message when a YouTube transcript is unavailable', async () => {
+    const { api, emitTranscriptCapture } = installImprovementMock()
+
+    render(<App />)
+
+    act(() =>
+      emitTranscriptCapture({
+        type: 'unavailable',
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        title: 'No Captions Video',
+        url: 'https://www.youtube.com/watch?v=nope',
+        reason: 'No transcript was found for this YouTube video.'
+      })
+    )
+
+    expect(await screen.findByText('Transcript unavailable')).toBeInTheDocument()
+    expect(screen.getAllByText('No transcript was found for this YouTube video.').length).toBeGreaterThan(0)
+    expect(api.sendCaptureToMentor).not.toHaveBeenCalled()
   })
 
   it('saves session notes to local storage', async () => {

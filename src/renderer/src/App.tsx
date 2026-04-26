@@ -1,6 +1,6 @@
 import type { FormEvent, ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { BrowserTab, CapturedSelection, MentorMessage, TabsSnapshot, XaiStatus } from '../../shared/ipc'
+import type { BrowserTab, CapturedSelection, MentorMessage, TabsSnapshot, TranscriptCaptureEvent, XaiStatus } from '../../shared/ipc'
 
 const initialSnapshot: TabsSnapshot = {
   tabs: [],
@@ -90,6 +90,7 @@ export default function App(): ReactElement {
   const [notes, setNotes] = useState(() => window.localStorage.getItem('improvement.notes') ?? '')
   const [lastSavedAt, setLastSavedAt] = useState(() => window.localStorage.getItem('improvement.notesSavedAt'))
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [transcriptNotice, setTranscriptNotice] = useState<TranscriptCaptureEvent | null>(null)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
 
@@ -108,6 +109,10 @@ export default function App(): ReactElement {
 
     const disposeSelections = window.improvement.onSelectionCaptured((selection) => {
       void sendCaptureToMentor(selection)
+    })
+
+    const disposeTranscriptCapture = window.improvement.onTranscriptCapture((event) => {
+      void handleTranscriptCapture(event)
     })
 
     const disposeMentorStream = window.improvement.onMentorStream((event) => {
@@ -149,6 +154,7 @@ export default function App(): ReactElement {
     return () => {
       disposeTabs()
       disposeSelections()
+      disposeTranscriptCapture()
       disposeMentorStream()
     }
   }, [])
@@ -213,6 +219,22 @@ export default function App(): ReactElement {
     await navigator.clipboard.writeText(message.content)
     setCopiedMessageId(message.id)
     window.setTimeout(() => setCopiedMessageId(null), 1400)
+  }
+
+  const handleTranscriptCapture = async (event: TranscriptCaptureEvent): Promise<void> => {
+    setRightCollapsed(false)
+    setTranscriptNotice(event)
+
+    if (event.type === 'captured') {
+      setMentorError(null)
+      await sendCaptureToMentor({
+        ...event.capture,
+        text: `YouTube transcript captured automatically.\n\n${event.capture.text}`
+      })
+      return
+    }
+
+    setMentorError(event.reason)
   }
 
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
@@ -400,6 +422,24 @@ export default function App(): ReactElement {
                 <h2>Notes + Mentor</h2>
                 <span>Capture ideas, ask Grok, and turn browsing into retained understanding.</span>
               </div>
+
+              {transcriptNotice && (
+                <section className={transcriptNotice.type === 'captured' ? 'transcript-card success' : 'transcript-card warning'}>
+                  <div>
+                    <strong>{transcriptNotice.type === 'captured' ? 'Transcript captured' : 'Transcript unavailable'}</strong>
+                    <span>
+                      {transcriptNotice.type === 'captured'
+                        ? `${transcriptNotice.capture.title} · ${formatHostname(transcriptNotice.capture.url)}`
+                        : `${transcriptNotice.title} · ${formatHostname(transcriptNotice.url)}`}
+                    </span>
+                  </div>
+                  <p>
+                    {transcriptNotice.type === 'captured'
+                      ? 'The YouTube transcript was sent to the Grok mentor workspace automatically.'
+                      : transcriptNotice.reason}
+                  </p>
+                </section>
+              )}
 
               <section className="notes-card">
                 <div className="card-header">
