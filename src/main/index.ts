@@ -1,6 +1,8 @@
-import { app, BrowserWindow, ipcMain, session, WebContentsView } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session, WebContentsView } from 'electron'
 import type { BrowserWindow as ElectronBrowserWindow, Event as ElectronEvent, WebContentsView as ElectronWebContentsView } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type {
   BrowserBounds,
   BrowserTab,
@@ -13,12 +15,14 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
+import type { CapturedResource } from '../shared/resources'
 import {
   createPersistedTabState,
   readPersistedTabState,
   writePersistedTabState,
   type PersistedTabState
 } from './tabPersistence'
+import { importPdfResource } from './resources/pdf/PdfImporter'
 import { getTranscriptExtractor } from './transcript'
 
 type ResourceRepositoryInstance = import('./resources/ResourceRepository').ResourceRepository
@@ -332,6 +336,47 @@ async function initializeResourceRepository(): Promise<void> {
     console.warn('Captured resource storage is disabled because SQLite failed to initialize:', error)
     resourceRepository = null
   }
+}
+
+async function importPdf(): Promise<CapturedResource | null> {
+  if (!mainWindow) {
+    return null
+  }
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import PDF',
+    properties: ['openFile'],
+    filters: [{ name: 'PDF Documents', extensions: ['pdf'] }]
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  if (!resourceRepository) {
+    throw new Error('Resource storage is not available, so the PDF cannot be imported.')
+  }
+
+  const resource = await importPdfResource(result.filePaths[0], app.getPath('userData'))
+  await resourceRepository.save(resource)
+  createTab(resource.url)
+
+  return resource
+}
+
+async function openPdfResource(resourceId: string): Promise<TabsSnapshot> {
+  const resource = await resourceRepository?.getById(resourceId)
+  const filePath = typeof resource?.metadata.filePath === 'string' ? resource.metadata.filePath : null
+
+  if (!resource || resource.type !== 'pdf' || !filePath) {
+    throw new Error('This resource does not have a PDF file to open.')
+  }
+
+  if (!existsSync(filePath)) {
+    throw new Error('The imported PDF file could not be found on disk.')
+  }
+
+  return createTab(pathToFileURL(filePath).href)
 }
 
 async function saveCurrentTabs(): Promise<void> {
@@ -808,6 +853,8 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.deleteCapturedResource, async (_event, id: string) => {
     await resourceRepository?.delete(id)
   })
+  ipcMain.handle(ipcChannels.importPdfResource, () => importPdf())
+  ipcMain.handle(ipcChannels.openPdfResource, (_event, id: string) => openPdfResource(id))
   ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {
     const trimmed = apiKey.trim()
     temporaryXaiApiKey = trimmed.length > 0 ? trimmed : null

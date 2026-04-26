@@ -80,6 +80,8 @@ export interface RendererApi {
   getCapturedResources: () => Promise<CapturedResource[]>
   searchCapturedResources: (query: string) => Promise<CapturedResource[]>
   deleteCapturedResource: (id: string) => Promise<void>
+  importPdfResource: () => Promise<CapturedResource | null>
+  openPdfResource: (id: string) => Promise<TabsSnapshot>
   getXaiStatus: () => Promise<XaiStatus>
   setTemporaryXaiApiKey: (apiKey: string) => Promise<XaiStatus>
   captureTranscript: () => Promise<TranscriptCaptureEvent>
@@ -103,6 +105,8 @@ export const ipcChannels = {
   getCapturedResources: 'resources:get-all',
   searchCapturedResources: 'resources:search',
   deleteCapturedResource: 'resources:delete',
+  importPdfResource: 'resources:import-pdf',
+  openPdfResource: 'resources:open-pdf',
   tabsChanged: 'tabs:changed',
   selectionCaptured: 'selection:captured',
   browserSelection: 'browser:selection',

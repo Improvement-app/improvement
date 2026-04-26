@@ -60,6 +60,8 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       }
       return Promise.resolve()
     }),
+    importPdfResource: vi.fn().mockResolvedValue(null),
+    openPdfResource: vi.fn().mockResolvedValue(tabsSnapshot),
     getXaiStatus: vi.fn().mockResolvedValue({
       hasApiKey: true,
       source: 'environment',
@@ -316,6 +318,33 @@ describe('App', () => {
       "00:00 - One of the terms that's often thrown around is brake bias. 00:09 This would easily be one of the most misused terms in setup discussions."
     )
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
+  it('opens imported PDF resources in the browser', async () => {
+    const user = userEvent.setup()
+    const { api } = installImprovementMock([
+      {
+        id: 'pdf-1',
+        type: 'pdf',
+        source: 'file-upload',
+        title: 'Vehicle Dynamics Notes',
+        url: 'file:///Users/david/Library/Application%20Support/Improvement/pdfs/vehicle-dynamics.pdf',
+        content: 'Extracted PDF text about load transfer.',
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        metadata: {
+          filePath: '/Users/david/Library/Application Support/Improvement/pdfs/vehicle-dynamics.pdf',
+          pageCount: 12
+        },
+        tags: ['pdf']
+      }
+    ])
+
+    render(<App />)
+
+    expect((await screen.findAllByText('Vehicle Dynamics Notes')).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: 'Open PDF in Browser' }))
+
+    expect(api.openPdfResource).toHaveBeenCalledWith('pdf-1')
   })
 
   it('saves session notes to local storage', async () => {

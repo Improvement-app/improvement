@@ -18,7 +18,13 @@ function formatHostname(url: string): string {
   }
 
   try {
-    return new URL(url).hostname.replace(/^www\./, '')
+    const parsed = new URL(url)
+
+    if (parsed.protocol === 'file:') {
+      return decodeURIComponent(parsed.pathname.split('/').at(-1) || 'Local file')
+    }
+
+    return parsed.hostname.replace(/^www\./, '')
   } catch {
     return url
   }
@@ -245,6 +251,7 @@ export default function App(): ReactElement {
   const [capturedResources, setCapturedResources] = useState<CapturedResource[]>([])
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [showTranscriptTimestamps, setShowTranscriptTimestamps] = useState(false)
+  const [isImportingPdf, setIsImportingPdf] = useState(false)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
@@ -449,6 +456,33 @@ export default function App(): ReactElement {
   const deleteResource = async (resourceId: string): Promise<void> => {
     await window.improvement.deleteCapturedResource(resourceId)
     await loadCapturedResources()
+  }
+
+  const importPdf = async (): Promise<void> => {
+    setRightCollapsed(false)
+    setMentorError(null)
+    setIsImportingPdf(true)
+
+    try {
+      const resource = await window.improvement.importPdfResource()
+
+      if (resource) {
+        await loadCapturedResources(resource)
+        setSelectedResourceId(resource.id)
+      }
+    } catch {
+      setMentorError('Unable to import the selected PDF.')
+    } finally {
+      setIsImportingPdf(false)
+    }
+  }
+
+  const openPdfInBrowser = async (resource: CapturedResource): Promise<void> => {
+    try {
+      setSnapshot(await window.improvement.openPdfResource(resource.id))
+    } catch {
+      setMentorError('Unable to open this PDF in the browser.')
+    }
   }
 
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
@@ -660,6 +694,16 @@ export default function App(): ReactElement {
                 </section>
               )}
 
+              <section className="resource-import-card">
+                <div>
+                  <h3>Resources</h3>
+                  <span>Import PDFs into the local library and open them in the browser workspace.</span>
+                </div>
+                <button type="button" onClick={() => void importPdf()} disabled={isImportingPdf}>
+                  {isImportingPdf ? 'Importing...' : 'Import PDF'}
+                </button>
+              </section>
+
               {capturedResources.length > 0 && (
                 <section className="captured-transcripts-card resource-library-card">
                   <div className="card-header">
@@ -696,6 +740,11 @@ export default function App(): ReactElement {
                           </span>
                         </div>
                         <div className="resource-actions">
+                          {selectedResource.type === 'pdf' && (
+                            <button type="button" onClick={() => void openPdfInBrowser(selectedResource)}>
+                              Open PDF in Browser
+                            </button>
+                          )}
                           {selectedResource.type === 'transcript' && (
                             <button type="button" onClick={() => setShowTranscriptTimestamps((value) => !value)}>
                               {showTranscriptTimestamps ? 'Hide timestamps' : 'Show timestamps'}

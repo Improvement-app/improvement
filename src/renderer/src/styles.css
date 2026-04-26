@@ -292,6 +292,7 @@ h3 {
 .notes-card,
 .learning-actions-card,
 .transcript-card,
+.resource-import-card,
 .captured-transcripts-card,
 .mentor-message,
 .api-key-form,
@@ -375,6 +376,38 @@ h3 {
 
 .resource-library-card {
   gap: 12px;
+}
+
+.resource-import-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resource-import-card span {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.resource-import-card button {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.resource-import-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .resource-list {
