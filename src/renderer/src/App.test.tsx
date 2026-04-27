@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { CapturedSelection, MentorStreamEvent, RendererApi, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
-import type { Project, ProjectInput, ProjectResourceLink } from '../../shared/projects'
+import type { LearningGoal, LearningGoalInput, LearningGoalUpdate, Project, ProjectInput, ProjectProgress, ProjectResourceLink } from '../../shared/projects'
 import type { CapturedResource } from '../../shared/resources'
 
 const tabsSnapshot: TabsSnapshot = {
@@ -43,7 +43,20 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
   let mentorStream: ((event: MentorStreamEvent) => void) | null = null
   const resources: CapturedResource[] = [...initialResources]
   const projects: Project[] = []
+  const goals: LearningGoal[] = []
   const links: ProjectResourceLink[] = []
+
+  const progressForProject = (projectId: string): ProjectProgress => {
+    const projectGoals = goals.filter((goal) => goal.projectId === projectId)
+    const completedGoals = projectGoals.filter((goal) => goal.status === 'done').length
+
+    return {
+      projectId,
+      totalGoals: projectGoals.length,
+      completedGoals,
+      percentComplete: projectGoals.length === 0 ? 0 : Math.round((completedGoals / projectGoals.length) * 100)
+    }
+  }
 
   const api: RendererApi = {
     createTab: vi.fn().mockResolvedValue(tabsSnapshot),
@@ -63,7 +76,7 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       }
       return Promise.resolve()
     }),
-    getProjects: vi.fn().mockImplementation(() => Promise.resolve(projects)),
+    getProjects: vi.fn().mockImplementation(() => Promise.resolve([...projects])),
     createProject: vi.fn().mockImplementation((input: ProjectInput) => {
       const project: Project = {
         id: `project-${projects.length + 1}`,
@@ -80,8 +93,9 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
     }),
     updateProject: vi.fn().mockResolvedValue(null),
     deleteProject: vi.fn().mockResolvedValue(undefined),
-    linkResourceToProject: vi.fn().mockImplementation((resourceId: string, projectId: string) => {
+    linkResourceToProject: vi.fn().mockImplementation((resourceId: string, projectId: string, learningGoalId?: string | null) => {
       const existing = links.find((link) => link.resourceId === resourceId && link.projectId === projectId)
+      const learningGoal = learningGoalId ? goals.find((goal) => goal.id === learningGoalId) : undefined
       if (!existing) {
         const project = projects.find((item) => item.id === projectId)
         if (project) {
@@ -89,12 +103,17 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
             id: `link-${links.length + 1}`,
             resourceId,
             projectId,
+            learningGoalId: learningGoal?.id,
             linkedAt: '2026-04-26T12:00:00.000Z',
             notes: '',
             relevanceScore: 1,
-            project
+            project,
+            learningGoal
           })
         }
+      } else {
+        existing.learningGoalId = learningGoal?.id
+        existing.learningGoal = learningGoal
       }
       return Promise.resolve(links.filter((link) => link.resourceId === resourceId))
     }),
@@ -111,6 +130,54 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
     getProjectResources: vi.fn().mockImplementation((projectId: string) =>
       Promise.resolve(resources.filter((resource) => links.some((link) => link.projectId === projectId && link.resourceId === resource.id)))
     ),
+    getLearningGoals: vi.fn().mockImplementation((projectId: string) =>
+      Promise.resolve(goals.filter((goal) => goal.projectId === projectId))
+    ),
+    createLearningGoal: vi.fn().mockImplementation((input: LearningGoalInput) => {
+      const goal: LearningGoal = {
+        id: `goal-${goals.length + 1}`,
+        projectId: input.projectId,
+        title: input.title,
+        description: input.description,
+        status: input.status ?? 'todo',
+        priority: input.priority,
+        createdAt: input.createdAt ?? '2026-04-26T12:00:00.000Z',
+        completedAt: input.completedAt,
+        notes: input.notes
+      }
+      goals.push(goal)
+      return Promise.resolve(goal)
+    }),
+    updateLearningGoal: vi.fn().mockImplementation((update: LearningGoalUpdate) => {
+      const goal = goals.find((item) => item.id === update.id)
+      if (!goal) {
+        return Promise.resolve(null)
+      }
+      Object.assign(goal, update)
+      if (update.status === 'done' && !goal.completedAt) {
+        goal.completedAt = '2026-04-26T13:00:00.000Z'
+      }
+      if (update.status && update.status !== 'done') {
+        goal.completedAt = undefined
+      }
+      return Promise.resolve(goal)
+    }),
+    deleteLearningGoal: vi.fn().mockImplementation((id: string) => {
+      const index = goals.findIndex((goal) => goal.id === id)
+      if (index >= 0) {
+        goals.splice(index, 1)
+      }
+      return Promise.resolve()
+    }),
+    markLearningGoalComplete: vi.fn().mockImplementation((id: string) => {
+      const goal = goals.find((item) => item.id === id)
+      if (goal) {
+        goal.status = 'done'
+        goal.completedAt = '2026-04-26T13:00:00.000Z'
+      }
+      return Promise.resolve(goal ?? null)
+    }),
+    getProjectProgress: vi.fn().mockImplementation((projectId: string) => Promise.resolve(progressForProject(projectId))),
     importPdfResource: vi.fn().mockResolvedValue(null),
     openPdfResource: vi.fn().mockResolvedValue(tabsSnapshot),
     getXaiStatus: vi.fn().mockResolvedValue({
@@ -425,11 +492,55 @@ describe('App', () => {
     await user.selectOptions(await screen.findByLabelText('Current project'), 'All Resources')
     await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Spec Miata Build')
 
-    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1')
+    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', undefined)
     expect(await screen.findByText('Linked to Spec Miata Build')).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Current project'), 'Spec Miata Build')
     expect(await screen.findByText('1 linked')).toBeInTheDocument()
+  })
+
+  it('creates learning goals, updates progress, and links resources to goals', async () => {
+    const user = userEvent.setup()
+    const { api } = installImprovementMock([
+      {
+        id: 'resource-1',
+        type: 'pdf',
+        source: 'file-upload',
+        title: 'Bearing Clearance Notes',
+        content: 'Measure clearance with plastigage and micrometers.',
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        metadata: {},
+        tags: ['pdf']
+      }
+    ])
+
+    render(<App />)
+
+    expect((await screen.findAllByText('Bearing Clearance Notes')).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Engine Course')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
+    await user.click(await screen.findByRole('button', { name: 'New Goal' }))
+    await user.type(screen.getByPlaceholderText('Goal title'), 'Understand bearing clearance')
+    await user.type(screen.getByPlaceholderText('What should this goal help you understand or do?'), 'Learn measurement process.')
+    await user.selectOptions(screen.getByDisplayValue('Priority 3'), '5')
+    await user.click(screen.getByRole('button', { name: 'Create Goal' }))
+
+    expect((await screen.findAllByText('Understand bearing clearance')).length).toBeGreaterThan(0)
+    expect(screen.getByText('0 of 1 goals completed')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Change status for Understand bearing clearance'), 'done')
+    expect(await screen.findByText('1 of 1 goals completed')).toBeInTheDocument()
+    expect(screen.getByText('100%')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Current project'), 'All Resources')
+    await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Engine Course')
+    await user.selectOptions(screen.getByLabelText('Current project'), 'Engine Course')
+    await user.selectOptions(screen.getByLabelText('Link selected resource to goal'), 'Understand bearing clearance')
+
+    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', 'goal-1')
+    expect(await screen.findByText('Linked to Engine Course / Understand bearing clearance')).toBeInTheDocument()
   })
 
   it('saves session notes to local storage', async () => {

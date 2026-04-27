@@ -4,19 +4,23 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ResourceRepository } from '../resources/ResourceRepository'
 import { ProjectRepository } from './ProjectRepository'
+import { LearningGoalRepository } from './LearningGoalRepository'
 
 describe('ProjectRepository', () => {
   let userDataPath: string
   let resourceRepository: ResourceRepository
   let projectRepository: ProjectRepository
+  let learningGoalRepository: LearningGoalRepository
 
   beforeEach(() => {
     userDataPath = mkdtempSync(join(tmpdir(), 'improvement-projects-'))
     resourceRepository = new ResourceRepository(userDataPath)
     projectRepository = new ProjectRepository(userDataPath)
+    learningGoalRepository = new LearningGoalRepository(userDataPath)
   })
 
   afterEach(() => {
+    learningGoalRepository.close()
     projectRepository.close()
     resourceRepository.close()
     rmSync(userDataPath, { recursive: true, force: true })
@@ -109,5 +113,40 @@ describe('ProjectRepository', () => {
 
     expect(second.id).toBe(first.id)
     await expect(projectRepository.getLinksForResource('resource-1')).resolves.toHaveLength(1)
+  })
+
+  it('links a project resource to a learning goal', async () => {
+    await saveResource()
+    const project = await projectRepository.create({
+      title: 'Engine Building Fundamentals',
+      description: 'Course resources and notes.',
+      type: 'course',
+      notes: ''
+    })
+    const goal = await learningGoalRepository.create({
+      projectId: project.id,
+      title: 'Understand bearing clearance',
+      description: 'Measurement and setup',
+      priority: 5,
+      notes: ''
+    })
+
+    await projectRepository.linkResourceToProject({
+      resourceId: 'resource-1',
+      projectId: project.id,
+      learningGoalId: goal.id
+    })
+
+    await expect(projectRepository.getLinksForResource('resource-1')).resolves.toMatchObject([
+      {
+        resourceId: 'resource-1',
+        projectId: project.id,
+        learningGoalId: goal.id,
+        learningGoal: {
+          id: goal.id,
+          title: 'Understand bearing clearance'
+        }
+      }
+    ])
   })
 })

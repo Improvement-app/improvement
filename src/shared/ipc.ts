@@ -1,5 +1,14 @@
 import type { CapturedResource } from './resources'
-import type { Project, ProjectInput, ProjectResourceLink, ProjectUpdate } from './projects'
+import type {
+  LearningGoal,
+  LearningGoalInput,
+  LearningGoalUpdate,
+  Project,
+  ProjectInput,
+  ProjectProgress,
+  ProjectResourceLink,
+  ProjectUpdate
+} from './projects'
 
 export type TabId = string
 
@@ -95,10 +104,16 @@ export interface RendererApi {
   createProject: (project: ProjectInput) => Promise<Project>
   updateProject: (project: ProjectUpdate) => Promise<Project | null>
   deleteProject: (id: string) => Promise<void>
-  linkResourceToProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
+  linkResourceToProject: (resourceId: string, projectId: string, learningGoalId?: string | null) => Promise<ProjectResourceLink[]>
   unlinkResourceFromProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
   getResourceProjectLinks: (resourceId: string) => Promise<ProjectResourceLink[]>
   getProjectResources: (projectId: string) => Promise<CapturedResource[]>
+  getLearningGoals: (projectId: string) => Promise<LearningGoal[]>
+  createLearningGoal: (goal: LearningGoalInput) => Promise<LearningGoal>
+  updateLearningGoal: (goal: LearningGoalUpdate) => Promise<LearningGoal | null>
+  deleteLearningGoal: (id: string) => Promise<void>
+  markLearningGoalComplete: (id: string) => Promise<LearningGoal | null>
+  getProjectProgress: (projectId: string) => Promise<ProjectProgress>
   importPdfResource: () => Promise<CapturedResource | null>
   openPdfResource: (id: string) => Promise<TabsSnapshot>
   getXaiStatus: () => Promise<XaiStatus>
@@ -132,6 +147,12 @@ export const ipcChannels = {
   unlinkResourceFromProject: 'projects:unlink-resource',
   getResourceProjectLinks: 'projects:get-resource-links',
   getProjectResources: 'projects:get-resources',
+  getLearningGoals: 'goals:get-by-project',
+  createLearningGoal: 'goals:create',
+  updateLearningGoal: 'goals:update',
+  deleteLearningGoal: 'goals:delete',
+  markLearningGoalComplete: 'goals:mark-complete',
+  getProjectProgress: 'goals:get-project-progress',
   importPdfResource: 'resources:import-pdf',
   openPdfResource: 'resources:open-pdf',
   tabsChanged: 'tabs:changed',

@@ -6,7 +6,7 @@ Last updated: April 26, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, Phase 1 project-centered resource linking, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -24,8 +24,10 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
 - SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
 - SQLite-backed `ProjectRepository` under `src/main/projects/`, stored in the same `resources.db`, with project CRUD and resource linking/unlinking.
+- SQLite-backed `LearningGoalRepository` under `src/main/projects/`, with goal CRUD, status updates, completion timestamps, and project progress calculation.
 - Phase 1 Project-Centered Learning UI in the right sidebar: project selector, "New Project" form, All Resources view, per-project linked-resource view, and link/unlink controls for resources.
-- Transcript captures and PDF imports can be linked to the active project so newly captured learning material lands in the right project context immediately.
+- Phase 2 goal UI in the right sidebar: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
+- Transcript captures and PDF imports can be linked to the active project and active goal so newly captured learning material lands in the right context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
 - Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
@@ -60,11 +62,11 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 
 ## Current Architecture – Project Layer
 
-Status: **Phase 1 implemented – Projects + Resource Linking**.
+Status: **Phase 2 implemented – Learning Goals + Progress Tracking**.
 
 Improvement is moving toward a project-centered learning model where captured resources, goals, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, with the new project layer now connecting resources to user-defined learning projects.
 
-Next implementation priority: **Phase 2 = Learning Goals + Progress Tracking**.
+Next implementation priority: **Phase 3 = Knowledge Gap Detection + Recommendations**.
 
 ### Implemented Database Schema
 
@@ -90,22 +92,20 @@ Examples:
 
 **`learning_goals`**
 
-Status: planned for Phase 2.
+Status: implemented in Phase 2.
 
 Purpose: Stores specific, trackable objectives inside a project.
 
-Suggested fields:
+Implemented fields:
 - `id TEXT PRIMARY KEY`
 - `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
 - `title TEXT NOT NULL`
 - `description TEXT`
-- `status TEXT NOT NULL` — examples: `not_started`, `in_progress`, `blocked`, `completed`
-- `priority INTEGER DEFAULT 0`
-- `confidence INTEGER` — optional self-assessed or AI-estimated confidence score
+- `status TEXT NOT NULL` — allowed values: `todo`, `in-progress`, `done`
+- `priority INTEGER NOT NULL` — 1-5
 - `created_at TEXT NOT NULL`
-- `updated_at TEXT NOT NULL`
-- `target_date TEXT`
-- `metadata_json TEXT NOT NULL DEFAULT '{}'`
+- `completed_at TEXT`
+- `notes TEXT`
 
 Example:
 - Project: **Rebuild my Spec Miata Engine**
@@ -142,6 +142,7 @@ Implemented fields:
 - `id TEXT PRIMARY KEY`
 - `resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE`
 - `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
+- `learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL`
 - `linked_at TEXT NOT NULL`
 - `notes TEXT`
 - `relevance_score REAL NOT NULL DEFAULT 1`
@@ -161,7 +162,7 @@ Complete. The app now supports project CRUD through `ProjectRepository`, resourc
 
 **Phase 2 – Learning Goals + Progress Tracking**
 
-Add learning goals inside projects, track goal status and confidence, and connect resources or AI explanations to specific objectives. Course projects should support module or lesson progress tracking.
+Complete. The app now supports learning goal CRUD through `LearningGoalRepository`, goal status changes (`todo`, `in-progress`, `done`), completion timestamps, project progress calculation, right-sidebar progress display, and resource links that can optionally point at a specific goal.
 
 **Phase 3 – Knowledge Gap Detection + Recommendations**
 
@@ -181,6 +182,8 @@ Current test coverage includes:
 - SQLite FTS5 relevant-resource search, including index synchronization on save/update/delete.
 - SQLite project repository CRUD and resource linking/unlinking.
 - Renderer project creation, project selection, and resource linking controls.
+- SQLite learning goal repository CRUD, completion handling, and project progress calculation.
+- Renderer learning goal creation, editing, deletion, status changes, progress display, and goal-aware resource linking controls.
 - PDF filename cleanup and PDF resource browser-opening behavior.
 - Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.
@@ -191,9 +194,9 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 ## Next Priorities
 
-- Learning Goals + Progress Tracking (Phase 2).
 - Knowledge Gap Detection + Recommendations (Phase 3).
 - Make RAG prefer resources linked to the active project, then broaden to all resources when needed.
+- Let RAG and mentor prompts use active project and active goal context.
 - Add article, textbook, broader file-upload, and persisted note capture flows using the `CapturedResource` model.
 - Persist notes and mentor sessions in the local-first database.
 - Add vector embeddings and chunk-level semantic retrieval alongside FTS5.

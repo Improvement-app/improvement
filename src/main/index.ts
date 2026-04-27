@@ -16,7 +16,7 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import type { ProjectInput, ProjectUpdate } from '../shared/projects'
+import type { LearningGoalInput, LearningGoalUpdate, ProjectInput, ProjectUpdate } from '../shared/projects'
 import type { CapturedResource } from '../shared/resources'
 import {
   createPersistedTabState,
@@ -29,6 +29,7 @@ import { getTranscriptExtractor } from './transcript'
 
 type ResourceRepositoryInstance = import('./resources/ResourceRepository').ResourceRepository
 type ProjectRepositoryInstance = import('./projects/ProjectRepository').ProjectRepository
+type LearningGoalRepositoryInstance = import('./projects/LearningGoalRepository').LearningGoalRepository
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -59,6 +60,7 @@ let isQuitting = false
 let hasSavedTabsForQuit = false
 let resourceRepository: ResourceRepositoryInstance | null = null
 let projectRepository: ProjectRepositoryInstance | null = null
+let learningGoalRepository: LearningGoalRepositoryInstance | null = null
 const tabs = new Map<TabId, ManagedTab>()
 
 interface XaiChatMessage {
@@ -361,6 +363,16 @@ async function initializeProjectRepository(): Promise<void> {
   }
 }
 
+async function initializeLearningGoalRepository(): Promise<void> {
+  try {
+    const { LearningGoalRepository } = await import('./projects/LearningGoalRepository')
+    learningGoalRepository = new LearningGoalRepository(app.getPath('userData'))
+  } catch (error) {
+    console.warn('Learning goal storage is disabled because SQLite failed to initialize:', error)
+    learningGoalRepository = null
+  }
+}
+
 async function importPdf(): Promise<CapturedResource | null> {
   if (!mainWindow) {
     return null
@@ -393,6 +405,14 @@ function ensureProjectRepository(): ProjectRepositoryInstance {
   }
 
   return projectRepository
+}
+
+function ensureLearningGoalRepository(): LearningGoalRepositoryInstance {
+  if (!learningGoalRepository) {
+    throw new Error('Learning goal storage is not available.')
+  }
+
+  return learningGoalRepository
 }
 
 async function openPdfResource(resourceId: string): Promise<TabsSnapshot> {
@@ -920,6 +940,7 @@ app.whenReady().then(async () => {
   configureBrowserSession()
   await initializeResourceRepository()
   await initializeProjectRepository()
+  await initializeLearningGoalRepository()
 
   ipcMain.handle(ipcChannels.createTab, (_event, url?: string) => createTab(url))
   ipcMain.handle(ipcChannels.closeTab, (_event, tabId: TabId) => closeTab(tabId))
@@ -959,9 +980,9 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.deleteProject, async (_event, id: string) => {
     await ensureProjectRepository().delete(id)
   })
-  ipcMain.handle(ipcChannels.linkResourceToProject, async (_event, resourceId: string, projectId: string) => {
+  ipcMain.handle(ipcChannels.linkResourceToProject, async (_event, resourceId: string, projectId: string, learningGoalId?: string | null) => {
     const projects = ensureProjectRepository()
-    await projects.linkResourceToProject({ resourceId, projectId })
+    await projects.linkResourceToProject({ resourceId, projectId, learningGoalId })
     return projects.getLinksForResource(resourceId)
   })
   ipcMain.handle(ipcChannels.unlinkResourceFromProject, async (_event, resourceId: string, projectId: string) => {
@@ -971,6 +992,14 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle(ipcChannels.getResourceProjectLinks, async (_event, resourceId: string) => projectRepository?.getLinksForResource(resourceId) ?? [])
   ipcMain.handle(ipcChannels.getProjectResources, async (_event, projectId: string) => projectRepository?.getResourcesForProject(projectId) ?? [])
+  ipcMain.handle(ipcChannels.getLearningGoals, async (_event, projectId: string) => learningGoalRepository?.getByProjectId(projectId) ?? [])
+  ipcMain.handle(ipcChannels.createLearningGoal, async (_event, goal: LearningGoalInput) => ensureLearningGoalRepository().create(goal))
+  ipcMain.handle(ipcChannels.updateLearningGoal, async (_event, goal: LearningGoalUpdate) => ensureLearningGoalRepository().update(goal))
+  ipcMain.handle(ipcChannels.deleteLearningGoal, async (_event, id: string) => {
+    await ensureLearningGoalRepository().delete(id)
+  })
+  ipcMain.handle(ipcChannels.markLearningGoalComplete, async (_event, id: string) => ensureLearningGoalRepository().markComplete(id))
+  ipcMain.handle(ipcChannels.getProjectProgress, async (_event, projectId: string) => ensureLearningGoalRepository().getProjectProgress(projectId))
   ipcMain.handle(ipcChannels.importPdfResource, () => importPdf())
   ipcMain.handle(ipcChannels.openPdfResource, (_event, id: string) => openPdfResource(id))
   ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {
@@ -1028,6 +1057,8 @@ app.whenReady().then(async () => {
     resourceRepository = null
     projectRepository?.close()
     projectRepository = null
+    learningGoalRepository?.close()
+    learningGoalRepository = null
   })
 
   app.on('activate', () => {

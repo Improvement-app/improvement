@@ -9,7 +9,7 @@ import type {
   TranscriptCaptureEvent
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import type { ProjectInput, ProjectUpdate } from '../shared/projects'
+import type { LearningGoalInput, LearningGoalUpdate, ProjectInput, ProjectUpdate } from '../shared/projects'
 
 const api: RendererApi = {
   createTab: (url?: string) => ipcRenderer.invoke(ipcChannels.createTab, url),
@@ -29,12 +29,18 @@ const api: RendererApi = {
   createProject: (project: ProjectInput) => ipcRenderer.invoke(ipcChannels.createProject, project),
   updateProject: (project: ProjectUpdate) => ipcRenderer.invoke(ipcChannels.updateProject, project),
   deleteProject: (id: string) => ipcRenderer.invoke(ipcChannels.deleteProject, id),
-  linkResourceToProject: (resourceId: string, projectId: string) =>
-    ipcRenderer.invoke(ipcChannels.linkResourceToProject, resourceId, projectId),
+  linkResourceToProject: (resourceId: string, projectId: string, learningGoalId?: string | null) =>
+    ipcRenderer.invoke(ipcChannels.linkResourceToProject, resourceId, projectId, learningGoalId),
   unlinkResourceFromProject: (resourceId: string, projectId: string) =>
     ipcRenderer.invoke(ipcChannels.unlinkResourceFromProject, resourceId, projectId),
   getResourceProjectLinks: (resourceId: string) => ipcRenderer.invoke(ipcChannels.getResourceProjectLinks, resourceId),
   getProjectResources: (projectId: string) => ipcRenderer.invoke(ipcChannels.getProjectResources, projectId),
+  getLearningGoals: (projectId: string) => ipcRenderer.invoke(ipcChannels.getLearningGoals, projectId),
+  createLearningGoal: (goal: LearningGoalInput) => ipcRenderer.invoke(ipcChannels.createLearningGoal, goal),
+  updateLearningGoal: (goal: LearningGoalUpdate) => ipcRenderer.invoke(ipcChannels.updateLearningGoal, goal),
+  deleteLearningGoal: (id: string) => ipcRenderer.invoke(ipcChannels.deleteLearningGoal, id),
+  markLearningGoalComplete: (id: string) => ipcRenderer.invoke(ipcChannels.markLearningGoalComplete, id),
+  getProjectProgress: (projectId: string) => ipcRenderer.invoke(ipcChannels.getProjectProgress, projectId),
   importPdfResource: () => ipcRenderer.invoke(ipcChannels.importPdfResource),
   openPdfResource: (id: string) => ipcRenderer.invoke(ipcChannels.openPdfResource, id),
   getXaiStatus: () => ipcRenderer.invoke(ipcChannels.getXaiStatus),

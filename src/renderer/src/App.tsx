@@ -9,7 +9,16 @@ import type {
   TranscriptCaptureEvent,
   XaiStatus
 } from '../../shared/ipc'
-import type { Project, ProjectInput, ProjectResourceLink, ProjectType } from '../../shared/projects'
+import type {
+  LearningGoal,
+  LearningGoalInput,
+  LearningGoalStatus,
+  Project,
+  ProjectInput,
+  ProjectProgress,
+  ProjectResourceLink,
+  ProjectType
+} from '../../shared/projects'
 import type { CapturedResource } from '../../shared/resources'
 
 const initialSnapshot: TabsSnapshot = {
@@ -98,6 +107,12 @@ function resourceIcon(type: string): string {
   if (type === 'textbook') return 'B'
   if (type === 'note') return 'N'
   return 'R'
+}
+
+function goalStatusLabel(status: LearningGoalStatus): string {
+  if (status === 'in-progress') return 'In Progress'
+  if (status === 'done') return 'Done'
+  return 'Todo'
 }
 
 function resourceFromTranscriptEvent(event: Extract<TranscriptCaptureEvent, { type: 'captured' }>): CapturedResource {
@@ -263,12 +278,20 @@ export default function App(): ReactElement {
   const [projectResources, setProjectResources] = useState<CapturedResource[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [learningGoals, setLearningGoals] = useState<LearningGoal[]>([])
+  const [projectProgress, setProjectProgress] = useState<ProjectProgress | null>(null)
+  const [selectedGoalId, setSelectedGoalId] = useState('')
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [selectedResourceLinks, setSelectedResourceLinks] = useState<ProjectResourceLink[]>([])
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
   const [newProjectTitle, setNewProjectTitle] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
   const [newProjectType, setNewProjectType] = useState<ProjectType>('general')
+  const [showNewGoalForm, setShowNewGoalForm] = useState(false)
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
+  const [goalTitle, setGoalTitle] = useState('')
+  const [goalDescription, setGoalDescription] = useState('')
+  const [goalPriority, setGoalPriority] = useState(3)
   const [showTranscriptTimestamps, setShowTranscriptTimestamps] = useState(false)
   const [isImportingPdf, setIsImportingPdf] = useState(false)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
@@ -278,6 +301,10 @@ export default function App(): ReactElement {
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId]
+  )
+  const selectedGoal = useMemo(
+    () => learningGoals.find((goal) => goal.id === selectedGoalId) ?? null,
+    [learningGoals, selectedGoalId]
   )
   const displayedResources = selectedProject ? projectResources : capturedResources
   const selectedResource = useMemo(
@@ -397,6 +424,33 @@ export default function App(): ReactElement {
     return resources
   }
 
+  const loadLearningGoals = async (projectId: string): Promise<LearningGoal[]> => {
+    if (!projectId) {
+      setLearningGoals([])
+      setProjectProgress(null)
+      setSelectedGoalId('')
+      return []
+    }
+
+    const [goals, progress] = await Promise.all([
+      window.improvement.getLearningGoals(projectId),
+      window.improvement.getProjectProgress(projectId)
+    ])
+    setLearningGoals(goals)
+    setProjectProgress(progress)
+    setSelectedGoalId((currentId) =>
+      currentId && goals.some((goal) => goal.id === currentId)
+        ? currentId
+        : goals.find((goal) => goal.status !== 'done')?.id ?? goals[0]?.id ?? ''
+    )
+    return goals
+  }
+
+  const loadProjectWorkspace = async (projectId: string): Promise<CapturedResource[]> => {
+    const [resources] = await Promise.all([loadProjectResources(projectId), loadLearningGoals(projectId)])
+    return resources
+  }
+
   useEffect(() => {
     if (!selectedResource) {
       setSelectedResourceLinks([])
@@ -461,11 +515,14 @@ export default function App(): ReactElement {
     setSelectedProjectId(projectId)
     if (!projectId) {
       setProjectResources([])
+      setLearningGoals([])
+      setProjectProgress(null)
+      setSelectedGoalId('')
       setSelectedResourceId(capturedResources[0]?.id ?? null)
       return
     }
 
-    const resources = await loadProjectResources(projectId)
+    const resources = await loadProjectWorkspace(projectId)
     setSelectedResourceId(resources[0]?.id ?? null)
   }
 
@@ -491,6 +548,66 @@ export default function App(): ReactElement {
     setNewProjectType('general')
     setShowNewProjectForm(false)
     await selectProject(project.id)
+  }
+
+  const resetGoalForm = (): void => {
+    setEditingGoalId(null)
+    setGoalTitle('')
+    setGoalDescription('')
+    setGoalPriority(3)
+  }
+
+  const startEditingGoal = (goal: LearningGoal): void => {
+    setShowNewGoalForm(false)
+    setEditingGoalId(goal.id)
+    setGoalTitle(goal.title)
+    setGoalDescription(goal.description)
+    setGoalPriority(goal.priority)
+  }
+
+  const saveGoal = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+
+    if (!selectedProjectId || goalTitle.trim().length === 0) {
+      return
+    }
+
+    let createdGoalId = ''
+    if (editingGoalId) {
+      await window.improvement.updateLearningGoal({
+        id: editingGoalId,
+        title: goalTitle,
+        description: goalDescription,
+        priority: goalPriority
+      })
+    } else {
+      const input: LearningGoalInput = {
+        projectId: selectedProjectId,
+        title: goalTitle,
+        description: goalDescription,
+        priority: goalPriority,
+        notes: ''
+      }
+      const goal = await window.improvement.createLearningGoal(input)
+      createdGoalId = goal.id
+    }
+
+    resetGoalForm()
+    setShowNewGoalForm(false)
+    await loadLearningGoals(selectedProjectId)
+    if (createdGoalId) {
+      setSelectedGoalId(createdGoalId)
+    }
+  }
+
+  const updateGoalStatus = async (goal: LearningGoal, status: LearningGoalStatus): Promise<void> => {
+    await window.improvement.updateLearningGoal({ id: goal.id, status })
+    await loadLearningGoals(goal.projectId)
+  }
+
+  const deleteGoal = async (goal: LearningGoal): Promise<void> => {
+    await window.improvement.deleteLearningGoal(goal.id)
+    await loadLearningGoals(goal.projectId)
   }
 
   const saveNotes = (): void => {
@@ -520,7 +637,7 @@ export default function App(): ReactElement {
       setMentorError(null)
       const fallbackResource = event.resource ?? resourceFromTranscriptEvent(event)
       if (selectedProjectId && event.resource) {
-        await window.improvement.linkResourceToProject(event.resource.id, selectedProjectId)
+        await window.improvement.linkResourceToProject(event.resource.id, selectedProjectId, selectedGoalId || undefined)
       }
       await loadCapturedResources(fallbackResource)
       return
@@ -576,7 +693,7 @@ export default function App(): ReactElement {
 
       if (resource) {
         if (selectedProjectId) {
-          await window.improvement.linkResourceToProject(resource.id, selectedProjectId)
+          await window.improvement.linkResourceToProject(resource.id, selectedProjectId, selectedGoalId || undefined)
         }
         await loadCapturedResources(resource)
         setSelectedResourceId(resource.id)
@@ -605,16 +722,16 @@ export default function App(): ReactElement {
       return
     }
 
-    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, selectedProjectId))
+    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, selectedProjectId, selectedGoalId || undefined))
     await loadProjectResources(selectedProjectId)
   }
 
-  const linkSelectedResourceToProjectId = async (projectId: string): Promise<void> => {
+  const linkSelectedResourceToProjectId = async (projectId: string, goalId?: string | null): Promise<void> => {
     if (!selectedResource || !projectId) {
       return
     }
 
-    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, projectId))
+    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, projectId, goalId))
     if (projectId === selectedProjectId) {
       await loadProjectResources(projectId)
     }
@@ -901,14 +1018,121 @@ export default function App(): ReactElement {
                     <small>
                       {projectResources.length} linked {projectResources.length === 1 ? 'resource' : 'resources'}
                     </small>
+                    {projectProgress && (
+                      <div className="goal-progress">
+                        <div>
+                          <span>
+                            {projectProgress.completedGoals} of {projectProgress.totalGoals} goals completed
+                          </span>
+                          <strong>{projectProgress.percentComplete}%</strong>
+                        </div>
+                        <progress value={projectProgress.percentComplete} max={100} />
+                      </div>
+                    )}
                   </div>
                 )}
               </section>
 
+              {selectedProject && (
+                <section className="goals-card">
+                  <div className="card-header">
+                    <div>
+                      <h3>Goals</h3>
+                      <span>Pick the next objective and keep project progress visible.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetGoalForm()
+                        setShowNewGoalForm((value) => !value)
+                      }}
+                    >
+                      {showNewGoalForm ? 'Cancel' : 'New Goal'}
+                    </button>
+                  </div>
+
+                  {learningGoals.length > 0 && (
+                    <label className="project-selector">
+                      <span>Active goal for new resources</span>
+                      <select value={selectedGoalId} onChange={(event) => setSelectedGoalId(event.target.value)}>
+                        <option value="">No active goal</option>
+                        {learningGoals.map((goal) => (
+                          <option key={goal.id} value={goal.id}>
+                            {goal.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  {(showNewGoalForm || editingGoalId) && (
+                    <form className="new-project-form" onSubmit={saveGoal}>
+                      <input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} placeholder="Goal title" />
+                      <textarea
+                        value={goalDescription}
+                        onChange={(event) => setGoalDescription(event.target.value)}
+                        placeholder="What should this goal help you understand or do?"
+                      />
+                      <select value={goalPriority} onChange={(event) => setGoalPriority(Number(event.target.value))}>
+                        <option value={1}>Priority 1</option>
+                        <option value={2}>Priority 2</option>
+                        <option value={3}>Priority 3</option>
+                        <option value={4}>Priority 4</option>
+                        <option value={5}>Priority 5</option>
+                      </select>
+                      <button type="submit" disabled={goalTitle.trim().length === 0}>
+                        {editingGoalId ? 'Save Goal' : 'Create Goal'}
+                      </button>
+                    </form>
+                  )}
+
+                  <div className="goal-list">
+                    {learningGoals.length === 0 ? (
+                      <p className="empty-goals">No goals yet. Add one clear next objective for this project.</p>
+                    ) : (
+                      learningGoals.map((goal) => (
+                        <article key={goal.id} className={selectedGoalId === goal.id ? 'goal-row active' : 'goal-row'}>
+                          <div>
+                            <strong>{goal.title}</strong>
+                            {goal.description && <span>{goal.description}</span>}
+                            <small>Priority {goal.priority}</small>
+                          </div>
+                          <div className="goal-actions">
+                            <span className={`goal-status ${goal.status}`}>{goalStatusLabel(goal.status)}</span>
+                            <select
+                              aria-label={`Change status for ${goal.title}`}
+                              value={goal.status}
+                              onChange={(event) => void updateGoalStatus(goal, event.target.value as LearningGoalStatus)}
+                            >
+                              <option value="todo">Todo</option>
+                              <option value="in-progress">In Progress</option>
+                              <option value="done">Done</option>
+                            </select>
+                            <button type="button" onClick={() => setSelectedGoalId(goal.id)}>
+                              Use
+                            </button>
+                            <button type="button" onClick={() => startEditingGoal(goal)}>
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => void deleteGoal(goal)}>
+                              Delete
+                            </button>
+                          </div>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </section>
+              )}
+
               <section className="resource-import-card">
                 <div>
                   <h3>Resources</h3>
-                  <span>Import PDFs into the local library and open them in the browser workspace.</span>
+                  <span>
+                    {selectedGoal
+                      ? `New imports will link to ${selectedGoal.title}.`
+                      : 'Import PDFs into the local library and open them in the browser workspace.'}
+                  </span>
                 </div>
                 <button type="button" onClick={() => void importPdf()} disabled={isImportingPdf}>
                   {isImportingPdf ? 'Importing...' : 'Import PDF'}
@@ -953,7 +1177,12 @@ export default function App(): ReactElement {
                           </span>
                           {selectedResourceLinks.length > 0 && (
                             <span className="linked-projects">
-                              Linked to {selectedResourceLinks.map((link) => link.project.title).join(', ')}
+                              Linked to{' '}
+                              {selectedResourceLinks
+                                .map((link) =>
+                                  link.learningGoal ? `${link.project.title} / ${link.learningGoal.title}` : link.project.title
+                                )
+                                .join(', ')}
                             </span>
                           )}
                         </div>
@@ -986,6 +1215,22 @@ export default function App(): ReactElement {
                             >
                               {isSelectedResourceLinkedToProject ? 'Unlink Project' : 'Link to Project'}
                             </button>
+                          )}
+                          {selectedProjectId && learningGoals.length > 0 && (
+                            <select
+                              aria-label="Link selected resource to goal"
+                              value={selectedResourceLinks.find((link) => link.projectId === selectedProjectId)?.learningGoalId ?? ''}
+                              onChange={(event) =>
+                                void linkSelectedResourceToProjectId(selectedProjectId, event.target.value || null)
+                              }
+                            >
+                              <option value="">No goal link</option>
+                              {learningGoals.map((goal) => (
+                                <option key={goal.id} value={goal.id}>
+                                  {goal.title}
+                                </option>
+                              ))}
+                            </select>
                           )}
                           {selectedResource.type === 'pdf' && (
                             <button type="button" onClick={() => void openPdfInBrowser(selectedResource)}>

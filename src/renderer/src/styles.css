@@ -293,6 +293,7 @@ h3 {
 .learning-actions-card,
 .transcript-card,
 .projects-card,
+.goals-card,
 .resource-import-card,
 .captured-transcripts-card,
 .mentor-message,
@@ -329,7 +330,8 @@ h3 {
   line-height: 1.45;
 }
 
-.projects-card {
+.projects-card,
+.goals-card {
   display: grid;
   gap: 12px;
 }
@@ -372,6 +374,118 @@ h3 {
   border: 1px solid #dbeafe;
   border-radius: 12px;
   background: #eff6ff;
+}
+
+.goal-progress {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.goal-progress div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.goal-progress strong {
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.goal-progress progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+}
+
+.goal-progress progress::-webkit-progress-bar {
+  background: #dbeafe;
+}
+
+.goal-progress progress::-webkit-progress-value {
+  background: #2563eb;
+}
+
+.goal-list {
+  display: grid;
+  gap: 8px;
+}
+
+.goal-row {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #e3e8f2;
+  border-radius: 13px;
+  background: #fbfdff;
+}
+
+.goal-row.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.goal-row strong,
+.goal-row span,
+.goal-row small {
+  display: block;
+}
+
+.goal-row strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.goal-row span,
+.goal-row small,
+.empty-goals {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.goal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.goal-actions select {
+  max-width: 132px;
+  padding: 7px 8px;
+  border: 1px solid #d7deea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
+}
+
+.goal-status {
+  display: inline-grid;
+  place-items: center;
+  padding: 6px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.goal-status.todo {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.goal-status.in-progress {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.goal-status.done {
+  background: #ecfdf3;
+  color: #027a48;
 }
 
 .project-summary strong {

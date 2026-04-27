@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CapturedResource } from '../../shared/resources'
-import type { Project, ProjectInput, ProjectResourceLink, ProjectType, ProjectUpdate, ResourceLink } from '../../shared/projects'
+import type { LearningGoal, LearningGoalStatus, Project, ProjectInput, ProjectResourceLink, ProjectType, ProjectUpdate, ResourceLink } from '../../shared/projects'
 
 interface ProjectRow {
   id: string
@@ -19,6 +19,7 @@ interface ResourceLinkRow {
   id: string
   resource_id: string
   project_id: string
+  learning_goal_id: string | null
   linked_at: string
   notes: string | null
   relevance_score: number
@@ -32,6 +33,15 @@ interface ProjectResourceLinkRow extends ResourceLinkRow {
   project_created_at: string
   project_target_date: string | null
   project_notes: string | null
+  goal_id: string | null
+  goal_project_id: string | null
+  goal_title: string | null
+  goal_description: string | null
+  goal_status: LearningGoalStatus | null
+  goal_priority: number | null
+  goal_created_at: string | null
+  goal_completed_at: string | null
+  goal_notes: string | null
 }
 
 interface ResourceRow {
@@ -133,6 +143,7 @@ export class ProjectRepository {
   async linkResourceToProject(input: {
     resourceId: string
     projectId: string
+    learningGoalId?: string | null
     notes?: string
     relevanceScore?: number
   }): Promise<ResourceLink> {
@@ -141,13 +152,30 @@ export class ProjectRepository {
       .get(input.resourceId, input.projectId) as ResourceLinkRow | undefined
 
     if (existing) {
-      return this.linkFromRow(existing)
+      const next = {
+        ...this.linkFromRow(existing),
+        learningGoalId: input.learningGoalId === undefined ? existing.learning_goal_id ?? undefined : input.learningGoalId ?? undefined,
+        notes: input.notes?.trim() ?? existing.notes ?? '',
+        relevanceScore: input.relevanceScore ?? existing.relevance_score
+      }
+      this.db
+        .prepare(
+          `UPDATE resource_links
+           SET learning_goal_id = @learningGoalId,
+               notes = @notes,
+               relevance_score = @relevanceScore
+           WHERE id = @id`
+        )
+        .run(this.linkParams(next))
+
+      return next
     }
 
     const link: ResourceLink = {
       id: crypto.randomUUID(),
       resourceId: input.resourceId,
       projectId: input.projectId,
+      learningGoalId: input.learningGoalId,
       linkedAt: new Date().toISOString(),
       notes: input.notes?.trim() ?? '',
       relevanceScore: input.relevanceScore ?? 1
@@ -156,9 +184,9 @@ export class ProjectRepository {
     this.db
       .prepare(
         `INSERT INTO resource_links (
-          id, resource_id, project_id, linked_at, notes, relevance_score
+          id, resource_id, project_id, learning_goal_id, linked_at, notes, relevance_score
         ) VALUES (
-          @id, @resourceId, @projectId, @linkedAt, @notes, @relevanceScore
+          @id, @resourceId, @projectId, @learningGoalId, @linkedAt, @notes, @relevanceScore
         )`
       )
       .run(this.linkParams(link))
@@ -180,9 +208,19 @@ export class ProjectRepository {
                 projects.status AS project_status,
                 projects.created_at AS project_created_at,
                 projects.target_date AS project_target_date,
-                projects.notes AS project_notes
+                projects.notes AS project_notes,
+                learning_goals.id AS goal_id,
+                learning_goals.project_id AS goal_project_id,
+                learning_goals.title AS goal_title,
+                learning_goals.description AS goal_description,
+                learning_goals.status AS goal_status,
+                learning_goals.priority AS goal_priority,
+                learning_goals.created_at AS goal_created_at,
+                learning_goals.completed_at AS goal_completed_at,
+                learning_goals.notes AS goal_notes
          FROM resource_links
          JOIN projects ON projects.id = resource_links.project_id
+         LEFT JOIN learning_goals ON learning_goals.id = resource_links.learning_goal_id
          WHERE resource_links.resource_id = ?
          ORDER BY resource_links.linked_at DESC`
       )
@@ -222,6 +260,19 @@ export class ProjectRepository {
         notes TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS learning_goals (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in-progress', 'done')),
+        priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        notes TEXT,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
       CREATE TABLE IF NOT EXISTS resource_links (
         id TEXT PRIMARY KEY,
         resource_id TEXT NOT NULL,
@@ -229,14 +280,23 @@ export class ProjectRepository {
         linked_at TEXT NOT NULL,
         notes TEXT,
         relevance_score REAL NOT NULL DEFAULT 1,
+        learning_goal_id TEXT,
         UNIQUE(resource_id, project_id),
         FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE,
-        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(learning_goal_id) REFERENCES learning_goals(id) ON DELETE SET NULL
       );
 
       CREATE INDEX IF NOT EXISTS idx_resource_links_resource ON resource_links(resource_id);
       CREATE INDEX IF NOT EXISTS idx_resource_links_project ON resource_links(project_id);
+      CREATE INDEX IF NOT EXISTS idx_resource_links_learning_goal ON resource_links(learning_goal_id);
     `)
+
+    const columns = this.db.prepare('PRAGMA table_info(resource_links)').all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'learning_goal_id')) {
+      this.db.exec('ALTER TABLE resource_links ADD COLUMN learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_resource_links_learning_goal ON resource_links(learning_goal_id)')
+    }
   }
 
   private projectParams(project: Project): Record<string, unknown> {
@@ -257,6 +317,7 @@ export class ProjectRepository {
       id: link.id,
       resourceId: link.resourceId,
       projectId: link.projectId,
+      learningGoalId: link.learningGoalId ?? null,
       linkedAt: link.linkedAt,
       notes: link.notes,
       relevanceScore: link.relevanceScore
@@ -281,6 +342,7 @@ export class ProjectRepository {
       id: row.id,
       resourceId: row.resource_id,
       projectId: row.project_id,
+      learningGoalId: row.learning_goal_id ?? undefined,
       linkedAt: row.linked_at,
       notes: row.notes ?? '',
       relevanceScore: row.relevance_score
@@ -288,7 +350,7 @@ export class ProjectRepository {
   }
 
   private projectLinkFromRow(row: ProjectResourceLinkRow): ProjectResourceLink {
-    return {
+    const link: ProjectResourceLink = {
       ...this.linkFromRow(row),
       project: this.projectFromRow({
         id: row.project_id,
@@ -300,6 +362,26 @@ export class ProjectRepository {
         target_date: row.project_target_date,
         notes: row.project_notes
       })
+    }
+
+    if (row.goal_id && row.goal_project_id && row.goal_title && row.goal_status && row.goal_priority && row.goal_created_at) {
+      link.learningGoal = this.goalFromRow(row)
+    }
+
+    return link
+  }
+
+  private goalFromRow(row: ProjectResourceLinkRow): LearningGoal {
+    return {
+      id: row.goal_id ?? '',
+      projectId: row.goal_project_id ?? '',
+      title: row.goal_title ?? '',
+      description: row.goal_description ?? '',
+      status: row.goal_status ?? 'todo',
+      priority: row.goal_priority ?? 3,
+      createdAt: row.goal_created_at ?? '',
+      completedAt: row.goal_completed_at ?? undefined,
+      notes: row.goal_notes ?? ''
     }
   }
 
