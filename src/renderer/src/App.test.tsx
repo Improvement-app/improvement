@@ -543,6 +543,31 @@ describe('App', () => {
     expect(await screen.findByText('Linked to Engine Course / Understand bearing clearance')).toBeInTheDocument()
   })
 
+  it('shows project goals in the left tree and assigns schedule blocks', async () => {
+    const user = userEvent.setup()
+    installImprovementMock()
+
+    render(<App />)
+
+    expect(screen.getByText('Learning map')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Engine Course')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
+    await user.click(await screen.findByRole('button', { name: 'New Goal' }))
+    await user.type(screen.getByPlaceholderText('Goal title'), 'Understand bearing clearance')
+    await user.click(screen.getByRole('button', { name: 'Create Goal' }))
+
+    expect((await screen.findAllByText('Engine Course')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Understand bearing clearance')).length).toBeGreaterThan(0)
+
+    await user.click(screen.getAllByRole('button', { name: 'Schedule' })[0])
+    expect(screen.getByText('Today')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText(/8:00-9:00/), 'goal:project-1:goal-1')
+
+    expect(screen.getByLabelText(/8:00-9:00/)).toHaveValue('goal:project-1:goal-1')
+  })
+
   it('saves session notes to local storage', async () => {
     const user = userEvent.setup()
     installImprovementMock()

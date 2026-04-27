@@ -26,6 +26,20 @@ const initialSnapshot: TabsSnapshot = {
   activeTabId: null
 }
 
+type LeftSidebarMode = 'projects' | 'schedule'
+
+const scheduleSlots = [
+  '8:00-9:00',
+  '9:00-10:00',
+  '10:00-11:00',
+  '11:00-12:00',
+  '12:00-1:00',
+  '1:00-2:00',
+  '2:00-3:00',
+  '3:00-4:00',
+  '4:00-5:00'
+]
+
 function activeTabFrom(snapshot: TabsSnapshot): BrowserTab | null {
   return snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId) ?? null
 }
@@ -259,8 +273,9 @@ export default function App(): ReactElement {
   const browserFrameRef = useRef<HTMLDivElement | null>(null)
   const [snapshot, setSnapshot] = useState<TabsSnapshot>(initialSnapshot)
   const [address, setAddress] = useState('')
-  const [leftCollapsed, setLeftCollapsed] = useState(false)
-  const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [leftMode, setLeftMode] = useState<LeftSidebarMode>('projects')
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(new Set())
+  const [scheduleAssignments, setScheduleAssignments] = useState<Record<string, string>>({})
   const [xaiStatus, setXaiStatus] = useState<XaiStatus | null>(null)
   const [temporaryApiKey, setTemporaryApiKey] = useState('')
   const [mentorMessages, setMentorMessages] = useState<MentorMessage[]>([])
@@ -277,6 +292,7 @@ export default function App(): ReactElement {
   const [capturedResources, setCapturedResources] = useState<CapturedResource[]>([])
   const [projectResources, setProjectResources] = useState<CapturedResource[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [goalsByProject, setGoalsByProject] = useState<Record<string, LearningGoal[]>>({})
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [learningGoals, setLearningGoals] = useState<LearningGoal[]>([])
   const [projectProgress, setProjectProgress] = useState<ProjectProgress | null>(null)
@@ -407,7 +423,13 @@ export default function App(): ReactElement {
 
   const loadProjects = async (): Promise<void> => {
     try {
-      setProjects(await window.improvement.getProjects())
+      const nextProjects = await window.improvement.getProjects()
+      const goalEntries = await Promise.all(
+        nextProjects.map(async (project) => [project.id, await window.improvement.getLearningGoals(project.id)] as const)
+      )
+      setProjects(nextProjects)
+      setGoalsByProject(Object.fromEntries(goalEntries))
+      setExpandedProjectIds((expandedIds) => new Set([...expandedIds, ...nextProjects.map((project) => project.id)]))
     } catch {
       setMentorError('Unable to load projects.')
     }
@@ -437,6 +459,7 @@ export default function App(): ReactElement {
       window.improvement.getProjectProgress(projectId)
     ])
     setLearningGoals(goals)
+    setGoalsByProject((items) => ({ ...items, [projectId]: goals }))
     setProjectProgress(progress)
     setSelectedGoalId((currentId) =>
       currentId && goals.some((goal) => goal.id === currentId)
@@ -489,7 +512,7 @@ export default function App(): ReactElement {
       observer.disconnect()
       window.removeEventListener('resize', updateBounds)
     }
-  }, [leftCollapsed, rightCollapsed, snapshot.activeTabId])
+  }, [snapshot.activeTabId])
 
   const submitNavigation = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -526,6 +549,42 @@ export default function App(): ReactElement {
     setSelectedResourceId(resources[0]?.id ?? null)
   }
 
+  const selectGoalFromNavigation = async (goal: LearningGoal): Promise<void> => {
+    await selectProject(goal.projectId)
+    setSelectedGoalId(goal.id)
+  }
+
+  const toggleProjectExpanded = (projectId: string): void => {
+    setExpandedProjectIds((items) => {
+      const nextItems = new Set(items)
+      if (nextItems.has(projectId)) {
+        nextItems.delete(projectId)
+      } else {
+        nextItems.add(projectId)
+      }
+      return nextItems
+    })
+  }
+
+  const handleScheduleAssignment = async (slot: string, value: string): Promise<void> => {
+    setScheduleAssignments((items) => ({ ...items, [slot]: value }))
+
+    if (!value) {
+      return
+    }
+
+    const [kind, projectId, goalId] = value.split(':')
+    if (kind === 'project') {
+      await selectProject(projectId)
+      return
+    }
+
+    const goal = goalsByProject[projectId]?.find((item) => item.id === goalId)
+    if (goal) {
+      await selectGoalFromNavigation(goal)
+    }
+  }
+
   const createProject = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     const title = newProjectTitle.trim()
@@ -543,6 +602,8 @@ export default function App(): ReactElement {
     const project = await window.improvement.createProject(input)
 
     setProjects((items) => [project, ...items])
+    setGoalsByProject((items) => ({ ...items, [project.id]: [] }))
+    setExpandedProjectIds((items) => new Set([...items, project.id]))
     setNewProjectTitle('')
     setNewProjectDescription('')
     setNewProjectType('general')
@@ -630,7 +691,6 @@ export default function App(): ReactElement {
   }
 
   const handleTranscriptCapture = async (event: TranscriptCaptureEvent): Promise<void> => {
-    setRightCollapsed(false)
     setTranscriptNotice(event)
 
     if (event.type === 'captured') {
@@ -647,7 +707,6 @@ export default function App(): ReactElement {
   }
 
   const captureTranscript = async (): Promise<void> => {
-    setRightCollapsed(false)
     setMentorError(null)
     setIsCapturingTranscript(true)
 
@@ -684,7 +743,6 @@ export default function App(): ReactElement {
   }
 
   const importPdf = async (): Promise<void> => {
-    setRightCollapsed(false)
     setMentorError(null)
     setIsImportingPdf(true)
 
@@ -752,7 +810,6 @@ export default function App(): ReactElement {
   }
 
   const sendCaptureToMentor = async (selection: CapturedSelection): Promise<void> => {
-    setRightCollapsed(false)
     setMentorError(null)
     setRagStatus('idle')
     setRagResources([])
@@ -823,44 +880,104 @@ export default function App(): ReactElement {
         </div>
 
         <div className="top-bar-actions">
-          <button type="button" className="ghost-button" onClick={() => setLeftCollapsed((value) => !value)}>
-            {leftCollapsed ? 'Show Tasks' : 'Hide Tasks'}
+          <button type="button" className="ghost-button" onClick={() => setLeftMode('projects')}>
+            Projects
           </button>
-          <button type="button" className="mentor-button" onClick={() => setRightCollapsed(false)}>
-            Ask Mentor
+          <button type="button" className="mentor-button" onClick={() => setLeftMode('schedule')}>
+            Schedule
           </button>
         </div>
       </header>
 
       <section className="workspace">
-        <aside className={leftCollapsed ? 'sidebar left collapsed' : 'sidebar left'}>
-          <button type="button" className="collapse-button" onClick={() => setLeftCollapsed((value) => !value)}>
-            {leftCollapsed ? 'Tasks' : 'Collapse'}
-          </button>
-          {!leftCollapsed && (
-            <div className="panel-content">
-              <p className="eyebrow">Tasks & Schedule</p>
-              <h2>Today&apos;s learning plan</h2>
-              <ul className="task-list">
-                <li>
-                  <span className="checkbox" />
-                  Study suspension geometry fundamentals
-                </li>
-                <li>
-                  <span className="checkbox" />
-                  Capture three chassis design resources
-                </li>
-                <li>
-                  <span className="checkbox" />
-                  Draft fabrication questions for the mentor
-                </li>
-              </ul>
-              <div className="schedule-card">
-                <span>Next focus block</span>
-                <strong>7:30 PM - 8:15 PM</strong>
-              </div>
+        <aside className="sidebar left project-sidebar">
+          <div className="panel-content navigation-panel">
+            <div className="left-mode-switch" aria-label="Left sidebar mode">
+              <button type="button" className={leftMode === 'projects' ? 'active' : ''} onClick={() => setLeftMode('projects')}>
+                Projects
+              </button>
+              <button type="button" className={leftMode === 'schedule' ? 'active' : ''} onClick={() => setLeftMode('schedule')}>
+                Schedule
+              </button>
             </div>
-          )}
+
+            {leftMode === 'projects' ? (
+              <section className="project-tree-panel">
+                <p className="eyebrow">Projects</p>
+                <h2>Learning map</h2>
+                <div className="project-tree">
+                  {projects.length === 0 ? (
+                    <p className="empty-goals">Create a project in the workspace to start building your learning map.</p>
+                  ) : (
+                    projects.map((project) => {
+                      const projectGoals = goalsByProject[project.id] ?? []
+                      const expanded = expandedProjectIds.has(project.id)
+
+                      return (
+                        <div key={project.id} className="project-tree-item">
+                          <div className={selectedProjectId === project.id ? 'project-tree-row active' : 'project-tree-row'}>
+                            <button type="button" className="tree-toggle" onClick={() => toggleProjectExpanded(project.id)}>
+                              {expanded ? '-' : '+'}
+                            </button>
+                            <button type="button" className="tree-main" onClick={() => void selectProject(project.id)}>
+                              <strong>{project.title}</strong>
+                              <span>
+                                {project.type} · {projectGoals.length} {projectGoals.length === 1 ? 'goal' : 'goals'}
+                              </span>
+                            </button>
+                          </div>
+                          {expanded && (
+                            <div className="goal-tree-list">
+                              {projectGoals.length === 0 ? (
+                                <span className="tree-empty">No goals yet</span>
+                              ) : (
+                                projectGoals.map((goal) => (
+                                  <button
+                                    type="button"
+                                    key={goal.id}
+                                    className={selectedGoalId === goal.id ? 'goal-tree-row active' : 'goal-tree-row'}
+                                    onClick={() => void selectGoalFromNavigation(goal)}
+                                  >
+                                    <span className={`goal-status ${goal.status}`}>{goalStatusLabel(goal.status)}</span>
+                                    <strong>{goal.title}</strong>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </section>
+            ) : (
+              <section className="schedule-panel">
+                <p className="eyebrow">Schedule</p>
+                <h2>Today</h2>
+                <div className="schedule-grid">
+                  {scheduleSlots.map((slot) => (
+                    <label key={slot} className="time-block">
+                      <span>{slot}</span>
+                      <select value={scheduleAssignments[slot] ?? ''} onChange={(event) => void handleScheduleAssignment(slot, event.target.value)}>
+                        <option value="">Unassigned</option>
+                        {projects.map((project) => (
+                          <optgroup key={project.id} label={project.title}>
+                            <option value={`project:${project.id}`}>{project.title}</option>
+                            {(goalsByProject[project.id] ?? []).map((goal) => (
+                              <option key={goal.id} value={`goal:${project.id}:${goal.id}`}>
+                                {goal.title}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
         </aside>
 
         <section className="browser-column" aria-label="Browser content region">
@@ -934,12 +1051,8 @@ export default function App(): ReactElement {
           </div>
         </section>
 
-        <aside className={rightCollapsed ? 'sidebar right collapsed' : 'sidebar right'}>
-          <button type="button" className="collapse-button" onClick={() => setRightCollapsed((value) => !value)}>
-            {rightCollapsed ? 'Notes' : 'Collapse'}
-          </button>
-          {!rightCollapsed && (
-            <div className="panel-content learning-workspace">
+        <section className="learning-center" aria-label="Learning Workspace">
+          <div className="panel-content learning-workspace">
               <div className="workspace-heading">
                 <p className="eyebrow">Learning Workspace</p>
                 <h2>Notes + Mentor</h2>
@@ -1436,9 +1549,8 @@ export default function App(): ReactElement {
                 <strong>Future diagrams, charts, and fabrication previews will appear here.</strong>
                 <p>Use this space for geometry sketches, process flows, force diagrams, and AI-generated explanations tied to your notes.</p>
               </div>
-            </div>
-          )}
-        </aside>
+          </div>
+        </section>
       </section>
     </main>
   )

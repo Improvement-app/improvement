@@ -4,14 +4,15 @@ Last updated: April 26, 2026
 
 ## Current Status
 
-Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
+Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the right-side browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
 - Electron + React + TypeScript project scaffold using `electron-vite`.
-- Desktop shell with top bar, integrated browser tab strip, left Tasks & Schedule sidebar, center browser view, and right Learning Workspace sidebar.
+- Desktop shell with top bar, dual-mode left sidebar, center Learning Workspace, and right-side multi-tab browser.
+- Dual-mode left sidebar: Projects mode shows a project-goal tree, while Schedule mode shows local day time blocks that can be assigned to projects or goals.
 - Multi-tab browser backed by one `WebContentsView` per tab.
 - Tab persistence in Electron's `userData` folder, including URL, title, tab order, and last active tab restore.
 - Internal New Tab page at `improvement://new-tab` with search and technical learning resource links.
@@ -25,8 +26,10 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
 - SQLite-backed `ProjectRepository` under `src/main/projects/`, stored in the same `resources.db`, with project CRUD and resource linking/unlinking.
 - SQLite-backed `LearningGoalRepository` under `src/main/projects/`, with goal CRUD, status updates, completion timestamps, and project progress calculation.
-- Phase 1 Project-Centered Learning UI in the right sidebar: project selector, "New Project" form, All Resources view, per-project linked-resource view, and link/unlink controls for resources.
-- Phase 2 goal UI in the right sidebar: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
+- Phase 1 Project-Centered Learning UI in the center Learning Workspace: project selector, "New Project" form, All Resources view, per-project linked-resource view, and link/unlink controls for resources.
+- Phase 2 goal UI in the center Learning Workspace: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
+- Learning Workspace moved into the primary center panel so selected projects and goals become the main working context.
+- Multi-tab browser moved to the right panel while retaining tabs, address bar, navigation, transcript capture, and the Electron `WebContentsView` bounds flow.
 - Transcript captures and PDF imports can be linked to the active project and active goal so newly captured learning material lands in the right context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
@@ -35,7 +38,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - xAI/Grok streaming chat integration through the Electron main process.
 - Phase 1 RAG for freeform Grok questions: the main process searches local resources with FTS5, adds the top relevant excerpts to the prompt, asks Grok to cite local sources when useful, and shows the renderer whether it is searching or using matching resources.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
-- Follow-up mentor conversation panel in the right sidebar.
+- Follow-up mentor conversation panel in the center Learning Workspace.
 - Session notes area with local save support.
 - Learning-cell prompt starters: Explain, Visualize, Practice, and Quiz.
 - Styled Visualizer placeholder for future diagrams and generated learning aids.
@@ -158,11 +161,11 @@ Design notes:
 
 **Phase 1 – Projects + Resource Linking**
 
-Complete. The app now supports project CRUD through `ProjectRepository`, resource linking/unlinking through `resource_links`, IPC/preload APIs for project operations, and right-sidebar UI for creating projects, selecting project context, viewing linked resources, and linking/unlinking saved resources. RAG is still global and will be made project-aware in a later phase.
+Complete. The app now supports project CRUD through `ProjectRepository`, resource linking/unlinking through `resource_links`, IPC/preload APIs for project operations, and center-workspace UI for creating projects, selecting project context, viewing linked resources, and linking/unlinking saved resources. RAG is still global and will be made project-aware in a later phase.
 
 **Phase 2 – Learning Goals + Progress Tracking**
 
-Complete. The app now supports learning goal CRUD through `LearningGoalRepository`, goal status changes (`todo`, `in-progress`, `done`), completion timestamps, project progress calculation, right-sidebar progress display, and resource links that can optionally point at a specific goal.
+Complete. The app now supports learning goal CRUD through `LearningGoalRepository`, goal status changes (`todo`, `in-progress`, `done`), completion timestamps, project progress calculation, center-workspace progress display, and resource links that can optionally point at a specific goal.
 
 **Phase 3 – Knowledge Gap Detection + Recommendations**
 
@@ -184,6 +187,7 @@ Current test coverage includes:
 - Renderer project creation, project selection, and resource linking controls.
 - SQLite learning goal repository CRUD, completion handling, and project progress calculation.
 - Renderer learning goal creation, editing, deletion, status changes, progress display, and goal-aware resource linking controls.
+- Renderer layout coverage for the left project tree, Schedule mode, and time-block assignments.
 - PDF filename cleanup and PDF resource browser-opening behavior.
 - Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.
