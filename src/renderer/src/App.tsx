@@ -1007,12 +1007,6 @@ export default function App(): ReactElement {
 
         <section className="learning-center" aria-label="Learning Workspace">
           <div className="panel-content learning-workspace">
-              <div className="workspace-heading">
-                <p className="eyebrow">Learning Workspace</p>
-                <h2>Notes + Mentor</h2>
-                <span>Capture ideas, ask Grok, and turn browsing into retained understanding.</span>
-              </div>
-
               {transcriptNotice && (
                 <section className={transcriptNotice.type === 'captured' ? 'transcript-card success' : 'transcript-card warning'}>
                   <div>

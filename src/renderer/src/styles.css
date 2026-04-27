@@ -232,17 +232,6 @@ h3 {
   gap: 14px;
 }
 
-.workspace-heading {
-  display: grid;
-  gap: 5px;
-}
-
-.workspace-heading span {
-  color: #667085;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .navigation-panel {
   display: grid;
   align-content: start;
