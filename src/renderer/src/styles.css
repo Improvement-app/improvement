@@ -356,7 +356,8 @@ h3 {
   background: #eff6ff;
 }
 
-.project-tree-row .tree-delete {
+.project-tree-row .tree-delete,
+.resource-row .tree-delete {
   width: 24px;
   height: 24px;
   place-self: center;
@@ -370,12 +371,14 @@ h3 {
   transition: all 0.1s ease;
 }
 
-.project-tree-row:hover .tree-delete {
+.project-tree-row:hover .tree-delete,
+.resource-row:hover .tree-delete {
   opacity: 1;
   color: #ef4444;
 }
 
-.project-tree-row .tree-delete:hover {
+.project-tree-row .tree-delete:hover,
+.resource-row .tree-delete:hover {
   background: #fee2e2;
   border-radius: 4px;
 }
@@ -709,7 +712,7 @@ h3 {
 
 .resource-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   width: 100%;
   padding: 10px;
@@ -717,13 +720,24 @@ h3 {
   border-radius: 13px;
   background: #fbfdff;
   color: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
 .resource-row.active {
   border-color: #bfdbfe;
   background: #eff6ff;
+}
+
+.resource-row .resource-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
 }
 
 .resource-row strong,

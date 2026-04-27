@@ -26,7 +26,7 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
 - SQLite-backed `ProjectRepository` under `src/main/projects/`, stored in the same `resources.db`, with project CRUD and resource linking/unlinking.
 - SQLite-backed `LearningGoalRepository` under `src/main/projects/`, with goal CRUD, status updates, completion timestamps, and project progress calculation.
-- Phase 1 Project-Centered Learning UI: left sidebar project/goal tree with "New Project" button and form (moved from center), center Learning Workspace with streamlined goals/resources/mentor (no top Projects box or workspace header), All Resources view, per-project linked-resource view, link/unlink controls, and project delete (with optional associated resource deletion).
+- Phase 1 Project-Centered Learning UI: left sidebar project/goal tree with "New Project" button and form (moved from center), center Learning Workspace with streamlined goals/resources/mentor (no top Projects box or workspace header), All Resources view, per-project linked-resource view, link/unlink controls, project delete (optional associated resources), and resource delete buttons in lists (with optional on-disk file deletion for PDFs).
 - Phase 2 goal UI in the center Learning Workspace: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
 - Learning Workspace streamlined in primary center panel (transcript notices, goals, resources, mentor chat) with project context driven by left sidebar selection.
 - Multi-tab browser moved to the right panel while retaining tabs, address bar, navigation, transcript capture, PDF import on New Tab, and the Electron `WebContentsView` bounds flow.
@@ -182,10 +182,10 @@ Current test coverage includes:
 - Webpage selection capture routing into the Grok mentor panel.
 - Manual YouTube and HPAcademy transcript capture UI, captured transcript review, one-click Grok sending, and unavailable-state messaging.
 - Clean transcript resource rendering, timestamp toggling, and full transcript copying.
-- SQLite resource repository save/load, updates, search, type filtering, and deletion.
+- SQLite resource repository save/load, updates, search, type filtering, and deletion (with FTS5 triggers).
 - SQLite FTS5 relevant-resource search, including index synchronization on save/update/delete.
-- SQLite project repository CRUD and resource linking/unlinking.
-- Renderer project creation, project selection, and resource linking controls.
+- SQLite project/repository CRUD, getLinkedResourceIds, and resource linking/unlinking.
+- Renderer project/resource creation/selection/deletion UI (with confirm dialogs and optional file/resource cleanup), linking controls, and tree/list delete buttons.
 - SQLite learning goal repository CRUD, completion handling, and project progress calculation.
 - Renderer learning goal creation, editing, deletion, status changes, progress display, and goal-aware resource linking controls.
 - Renderer layout coverage for the left project tree, Schedule mode, and time-block assignments.

@@ -755,7 +755,12 @@ export default function App(): ReactElement {
   }
 
   const deleteResource = async (resourceId: string): Promise<void> => {
-    await window.improvement.deleteCapturedResource(resourceId)
+    const deleteFile = confirm(
+      'Delete this resource from the library?\n\n' +
+      'OK = also permanently delete the file from disk (PDFs only).\n' +
+      'Cancel = remove from database and project links but keep the file.'
+    )
+    await window.improvement.deleteCapturedResource(resourceId, deleteFile)
     await loadCapturedResources()
   }
 
@@ -1199,20 +1204,35 @@ export default function App(): ReactElement {
                   </div>
                   <div className="resource-list">
                     {displayedResources.map((resource) => (
-                      <button
-                        type="button"
+                      <div
                         key={resource.id}
                         className={selectedResource?.id === resource.id ? 'resource-row active' : 'resource-row'}
-                        onClick={() => setSelectedResourceId(resource.id)}
                       >
-                        <span className="resource-icon">{resourceIcon(resource.type)}</span>
-                        <span>
-                          <strong>{resource.title || 'Captured resource'}</strong>
-                          <small>
-                            {resource.type} · {resource.source} · {formatResourceDate(resource.capturedAt)}
-                          </small>
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          className="resource-main"
+                          onClick={() => setSelectedResourceId(resource.id)}
+                        >
+                          <span className="resource-icon">{resourceIcon(resource.type)}</span>
+                          <span>
+                            <strong>{resource.title || 'Captured resource'}</strong>
+                            <small>
+                              {resource.type} · {resource.source} · {formatResourceDate(resource.capturedAt)}
+                            </small>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="tree-delete"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void deleteResource(resource.id)
+                          }}
+                          title="Delete resource"
+                        >
+                          ×
+                        </button>
+                      </div>
                     ))}
                   </div>
                   {selectedResource && (

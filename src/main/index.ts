@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, session, WebContentsView } from 'electron'
 import type { BrowserWindow as ElectronBrowserWindow, Event as ElectronEvent, WebContentsView as ElectronWebContentsView } from 'electron'
-import { existsSync } from 'node:fs'
+import { existsSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type {
@@ -1053,7 +1053,19 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.getXaiStatus, () => getXaiStatus())
   ipcMain.handle(ipcChannels.getCapturedResources, async () => resourceRepository?.getAll() ?? [])
   ipcMain.handle(ipcChannels.searchCapturedResources, async (_event, query: string) => resourceRepository?.search(query) ?? [])
-  ipcMain.handle(ipcChannels.deleteCapturedResource, async (_event, id: string) => {
+  ipcMain.handle(ipcChannels.deleteCapturedResource, async (_event, id: string, deleteFile = false) => {
+    if (deleteFile && resourceRepository) {
+      const resource = await resourceRepository.getById(id)
+      if (resource?.type === 'pdf' && typeof resource.metadata?.filePath === 'string') {
+        try {
+          if (existsSync(resource.metadata.filePath)) {
+            unlinkSync(resource.metadata.filePath)
+          }
+        } catch (error) {
+          console.warn('Could not delete associated PDF file from disk:', error)
+        }
+      }
+    }
     await resourceRepository?.delete(id)
   })
   ipcMain.handle(ipcChannels.getProjects, async () => projectRepository?.getAll() ?? [])

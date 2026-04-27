@@ -34,14 +34,14 @@ We believe that with the right guidance, structure, and tools, anyone can develo
 - **Built-in Multi-Tab Browser** with New Tab page (including prominent Import PDF button), transcript capture for YouTube/HPAcademy, and native PDF viewing
 - **AI Mentor (Grok/xAI)** with RAG over local captured resources, streaming responses, learning-cell prompt starters (Explain/Visualize/Practice/Quiz), and follow-up chat
 - **Project-Centered Learning**: Left sidebar project/goal tree with New Project and New Goal flows; center Learning Workspace with goals, linked resources, notes, mentor, and progress tracking
-- **Smart Capture & Resources**: Text selection "Send to AI", PDF import/save/extract/link, unified resource library with SQLite FTS5 search
-- **Learning Workspace**: Streamlined center panel with transcript notices, goals management, resource review, session notes (localStorage), and visualizer placeholder
+- **Smart Capture & Resources**: Text selection "Send to AI", PDF import/save/extract/link/delete (optional file removal), unified resource library with SQLite FTS5 search and per-item delete buttons
+- **Learning Workspace**: Streamlined center panel with transcript notices, goals management, resource review (with delete), session notes (localStorage), and visualizer placeholder
 - **Schedule Mode**: Left sidebar for time blocking (in progress)
 - **Persistence**: Tab state, resources, projects, goals, links in SQLite + userData
 
 ## Current Status
 
-A fully functional desktop prototype with project-centered UI, multi-tab browser (right panel), streamlined center Learning Workspace (no top header or Projects box), left sidebar project tree, PDF/transcript capture, Grok mentor with local RAG, SQLite backend for resources/projects/goals, comprehensive tests, and polished Electron integration. See `IMPLEMENTATION.md` for detailed completed features, limitations, and next priorities (Phase 3: Knowledge Gaps).
+A fully functional desktop prototype with project-centered UI, multi-tab browser (right panel), streamlined center Learning Workspace, left sidebar project/goal tree with delete buttons, resource library with per-item delete (optional file cleanup for PDFs), PDF/transcript capture, Grok mentor with local RAG, SQLite backend, comprehensive tests, and polished Electron integration. See `IMPLEMENTATION.md` for detailed completed features, limitations, and next priorities (Phase 3: Knowledge Gaps).
 
 High-level spec in `docs/SPEC.md`. Runs on macOS (Electron + React + TS + Vite + Vitest).
 

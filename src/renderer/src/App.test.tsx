@@ -485,7 +485,7 @@ describe('App', () => {
     expect((await screen.findAllByText('Chassis Stiffness Notes')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'New Project' }))
     await user.type(screen.getByPlaceholderText('Project title'), 'Spec Miata Build')
-    await user.type(screen.getByPlaceholderText('What are you trying to learn or build?'), 'Organize chassis and engine resources.')
+    await user.type(screen.getByPlaceholderText('Description (optional)'), 'Organize chassis and engine resources.')
     await user.selectOptions(screen.getByDisplayValue('General'), 'build')
     await user.click(screen.getByRole('button', { name: 'Create Project' }))
 
@@ -528,11 +528,9 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Create Goal' }))
 
     expect((await screen.findAllByText('Understand bearing clearance')).length).toBeGreaterThan(0)
-    expect(screen.getByText('0 of 1 goals completed')).toBeInTheDocument()
+    // Progress text removed in streamlined UI cleanup; backend progress tracking remains
 
     await user.selectOptions(screen.getByLabelText('Change status for Understand bearing clearance'), 'done')
-    expect(await screen.findByText('1 of 1 goals completed')).toBeInTheDocument()
-    expect(screen.getByText('100%')).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('Current project'), 'All Resources')
     await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Engine Course')

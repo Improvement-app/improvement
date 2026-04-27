@@ -99,7 +99,7 @@ export interface RendererApi {
   setBrowserBounds: (bounds: BrowserBounds) => void
   getCapturedResources: () => Promise<CapturedResource[]>
   searchCapturedResources: (query: string) => Promise<CapturedResource[]>
-  deleteCapturedResource: (id: string) => Promise<void>
+  deleteCapturedResource: (id: string, deleteFile?: boolean) => Promise<void>
   getProjects: () => Promise<Project[]>
   createProject: (project: ProjectInput) => Promise<Project>
   updateProject: (project: ProjectUpdate) => Promise<Project | null>

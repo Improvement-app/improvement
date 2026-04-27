@@ -24,7 +24,7 @@ const api: RendererApi = {
   },
   getCapturedResources: () => ipcRenderer.invoke(ipcChannels.getCapturedResources),
   searchCapturedResources: (query: string) => ipcRenderer.invoke(ipcChannels.searchCapturedResources, query),
-  deleteCapturedResource: (id: string) => ipcRenderer.invoke(ipcChannels.deleteCapturedResource, id),
+  deleteCapturedResource: (id: string, deleteFile?: boolean) => ipcRenderer.invoke(ipcChannels.deleteCapturedResource, id, deleteFile),
   getProjects: () => ipcRenderer.invoke(ipcChannels.getProjects),
   createProject: (project: ProjectInput) => ipcRenderer.invoke(ipcChannels.createProject, project),
   updateProject: (project: ProjectUpdate) => ipcRenderer.invoke(ipcChannels.updateProject, project),
