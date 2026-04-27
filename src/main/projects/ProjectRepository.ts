@@ -175,7 +175,7 @@ export class ProjectRepository {
       id: crypto.randomUUID(),
       resourceId: input.resourceId,
       projectId: input.projectId,
-      learningGoalId: input.learningGoalId,
+      learningGoalId: input.learningGoalId ?? undefined,
       linkedAt: new Date().toISOString(),
       notes: input.notes?.trim() ?? '',
       relevanceScore: input.relevanceScore ?? 1

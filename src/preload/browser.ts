@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { ipcChannels } from '../shared/ipc'
 
 const BUTTON_ID = 'improvement-send-to-ai-button'
@@ -74,4 +74,10 @@ window.addEventListener('mousedown', (event) => {
   if ((event.target as Element | null)?.id !== BUTTON_ID) {
     removeButton()
   }
+})
+
+// Expose API to browser tab pages (New Tab page can now import PDFs using the same interface as renderer)
+contextBridge.exposeInMainWorld('improvement', {
+  importPdfResource: () => ipcRenderer.invoke(ipcChannels.importPdfResource),
+  openPdfResource: (id: string) => ipcRenderer.invoke(ipcChannels.openPdfResource, id)
 })

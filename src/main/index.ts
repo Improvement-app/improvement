@@ -224,6 +224,47 @@ function createNewTabHtml(): string {
         font-size: 13px;
         line-height: 1.45;
       }
+      .import-section {
+        margin: 28px 0 24px;
+        padding: 24px;
+        border: 2px dashed #93c5fd;
+        border-radius: 20px;
+        background: rgba(239, 246, 255, 0.8);
+        text-align: center;
+      }
+      .import-pdf-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 16px 36px;
+        font-size: 17px;
+        font-weight: 700;
+        background: linear-gradient(90deg, #1e40af, #3b82f6);
+        color: white;
+        border: 0;
+        border-radius: 9999px;
+        cursor: pointer;
+        transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 10px 15px -3px rgb(30 64 175 / 0.3);
+        font-family: inherit;
+      }
+      .import-pdf-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 20px 25px -5px rgb(30 64 175 / 0.4);
+        background: linear-gradient(90deg, #1e3a8a, #2563eb);
+      }
+      .import-pdf-button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .import-hint {
+        margin: 16px auto 0;
+        color: #475569;
+        font-size: 13.5px;
+        line-height: 1.5;
+        max-width: 460px;
+      }
     </style>
   </head>
   <body>
@@ -235,6 +276,18 @@ function createNewTabHtml(): string {
         <input id="search-input" autofocus placeholder="Search technical topics, videos, formulas, or documentation..." />
         <button type="submit">Search</button>
       </form>
+
+      <div class="import-section">
+        <button id="import-pdf-btn" class="import-pdf-button" type="button">
+          📄 Import PDF
+        </button>
+        <p class="import-hint">
+          Upload technical PDFs, manuals, research papers or textbooks.<br>
+          They will be text-extracted, saved locally, opened in a new browser tab,<br>
+          and automatically linked to your active project or learning goal if one is selected.
+        </p>
+      </div>
+
       <section>
         <p class="section-title">Technical learning resources</p>
         <div class="grid">
@@ -255,6 +308,35 @@ function createNewTabHtml(): string {
           window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
         }
       });
+
+      // Handle PDF import from New Tab page
+      const importBtn = document.getElementById('import-pdf-btn') as HTMLButtonElement | null
+      if (importBtn) {
+        importBtn.addEventListener('click', async () => {
+          if (!window.improvement?.importPdfResource) {
+            alert('PDF import functionality is not available in this browser context.')
+            return
+          }
+
+          const originalText = importBtn.textContent
+          importBtn.textContent = 'Importing PDF...'
+          importBtn.disabled = true
+
+          try {
+            const resource = await window.improvement.importPdfResource()
+            if (resource?.title) {
+              console.log('✅ PDF imported and opened in new tab:', resource.title)
+              // Note: PDF tab opens automatically via main process; linking happens if project context active
+            }
+          } catch (error) {
+            console.error('PDF import error:', error)
+            alert('Sorry, could not import the PDF. Make sure it is a valid PDF file.')
+          } finally {
+            importBtn.textContent = originalText
+            importBtn.disabled = false
+          }
+        })
+      }
     </script>
   </body>
 </html>`

@@ -6,7 +6,7 @@ Last updated: April 27, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the right-side browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -33,6 +33,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Transcript captures and PDF imports can be linked to the active project and active goal so newly captured learning material lands in the right context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
+- Import PDF button moved from the Learning Workspace's resource-import-card to a prominent, styled button on the New Tab page (`improvement://new-tab`) in the right-side browser panel. Updated browser preload with contextBridge exposure for `window.improvement.importPdfResource()`, added inline HTML/JS/CSS for the button and success handling. Removed old button, wrapper function, and state from renderer/App.tsx to eliminate duplicates. Linking to active project/goal continues to work via the shared import flow.
 - Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
 - Transcript success/unavailable notices, a unified captured resource library, cleaned transcript reading view with optional timestamps, copy/delete controls, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.

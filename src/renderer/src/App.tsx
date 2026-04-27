@@ -309,7 +309,6 @@ export default function App(): ReactElement {
   const [goalDescription, setGoalDescription] = useState('')
   const [goalPriority, setGoalPriority] = useState(3)
   const [showTranscriptTimestamps, setShowTranscriptTimestamps] = useState(false)
-  const [isImportingPdf, setIsImportingPdf] = useState(false)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
@@ -740,27 +739,6 @@ export default function App(): ReactElement {
   const deleteResource = async (resourceId: string): Promise<void> => {
     await window.improvement.deleteCapturedResource(resourceId)
     await loadCapturedResources()
-  }
-
-  const importPdf = async (): Promise<void> => {
-    setMentorError(null)
-    setIsImportingPdf(true)
-
-    try {
-      const resource = await window.improvement.importPdfResource()
-
-      if (resource) {
-        if (selectedProjectId) {
-          await window.improvement.linkResourceToProject(resource.id, selectedProjectId, selectedGoalId || undefined)
-        }
-        await loadCapturedResources(resource)
-        setSelectedResourceId(resource.id)
-      }
-    } catch {
-      setMentorError('Unable to import the selected PDF.')
-    } finally {
-      setIsImportingPdf(false)
-    }
   }
 
   const openPdfInBrowser = async (resource: CapturedResource): Promise<void> => {
@@ -1213,20 +1191,6 @@ export default function App(): ReactElement {
                   </div>
                 </section>
               )}
-
-              <section className="resource-import-card">
-                <div>
-                  <h3>Resources</h3>
-                  <span>
-                    {selectedGoal
-                      ? `New imports will link to ${selectedGoal.title}.`
-                      : 'Import PDFs into the local library and open them in the browser workspace.'}
-                  </span>
-                </div>
-                <button type="button" onClick={() => void importPdf()} disabled={isImportingPdf}>
-                  {isImportingPdf ? 'Importing...' : 'Import PDF'}
-                </button>
-              </section>
 
               {displayedResources.length > 0 && (
                 <section className="captured-transcripts-card resource-library-card">
