@@ -299,10 +299,6 @@ export default function App(): ReactElement {
   const [selectedGoalId, setSelectedGoalId] = useState('')
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [selectedResourceLinks, setSelectedResourceLinks] = useState<ProjectResourceLink[]>([])
-  const [showNewProjectForm, setShowNewProjectForm] = useState(false)
-  const [newProjectTitle, setNewProjectTitle] = useState('')
-  const [newProjectDescription, setNewProjectDescription] = useState('')
-  const [newProjectType, setNewProjectType] = useState<ProjectType>('general')
   const [showNewGoalForm, setShowNewGoalForm] = useState(false)
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
   const [goalTitle, setGoalTitle] = useState('')
@@ -582,32 +578,6 @@ export default function App(): ReactElement {
     if (goal) {
       await selectGoalFromNavigation(goal)
     }
-  }
-
-  const createProject = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    const title = newProjectTitle.trim()
-
-    if (!title) {
-      return
-    }
-
-    const input: ProjectInput = {
-      title,
-      description: newProjectDescription,
-      type: newProjectType,
-      notes: ''
-    }
-    const project = await window.improvement.createProject(input)
-
-    setProjects((items) => [project, ...items])
-    setGoalsByProject((items) => ({ ...items, [project.id]: [] }))
-    setExpandedProjectIds((items) => new Set([...items, project.id]))
-    setNewProjectTitle('')
-    setNewProjectDescription('')
-    setNewProjectType('general')
-    setShowNewProjectForm(false)
-    await selectProject(project.id)
   }
 
   const resetGoalForm = (): void => {
@@ -1024,75 +994,6 @@ export default function App(): ReactElement {
                   </p>
                 </section>
               )}
-
-              <section className="projects-card">
-                <div className="card-header">
-                  <div>
-                    <h3>Projects</h3>
-                    <span>Organize resources around courses, builds, and skill paths.</span>
-                  </div>
-                  <button type="button" onClick={() => setShowNewProjectForm((value) => !value)}>
-                    {showNewProjectForm ? 'Cancel' : 'New Project'}
-                  </button>
-                </div>
-
-                <label className="project-selector">
-                  <span>Current project</span>
-                  <select value={selectedProjectId} onChange={(event) => void selectProject(event.target.value)}>
-                    <option value="">All Resources</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {showNewProjectForm && (
-                  <form className="new-project-form" onSubmit={createProject}>
-                    <input
-                      value={newProjectTitle}
-                      onChange={(event) => setNewProjectTitle(event.target.value)}
-                      placeholder="Project title"
-                    />
-                    <textarea
-                      value={newProjectDescription}
-                      onChange={(event) => setNewProjectDescription(event.target.value)}
-                      placeholder="What are you trying to learn or build?"
-                    />
-                    <select value={newProjectType} onChange={(event) => setNewProjectType(event.target.value as ProjectType)}>
-                      <option value="general">General</option>
-                      <option value="course">Course</option>
-                      <option value="build">Build</option>
-                      <option value="skill">Skill</option>
-                    </select>
-                    <button type="submit" disabled={newProjectTitle.trim().length === 0}>
-                      Create Project
-                    </button>
-                  </form>
-                )}
-
-                {selectedProject && (
-                  <div className="project-summary">
-                    <strong>{selectedProject.title}</strong>
-                    <span>{selectedProject.description || 'No description yet.'}</span>
-                    <small>
-                      {projectResources.length} linked {projectResources.length === 1 ? 'resource' : 'resources'}
-                    </small>
-                    {projectProgress && (
-                      <div className="goal-progress">
-                        <div>
-                          <span>
-                            {projectProgress.completedGoals} of {projectProgress.totalGoals} goals completed
-                          </span>
-                          <strong>{projectProgress.percentComplete}%</strong>
-                        </div>
-                        <progress value={projectProgress.percentComplete} max={100} />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </section>
 
               {selectedProject && (
                 <section className="goals-card">
