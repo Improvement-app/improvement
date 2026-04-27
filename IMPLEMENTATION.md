@@ -26,10 +26,10 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
 - SQLite-backed `ProjectRepository` under `src/main/projects/`, stored in the same `resources.db`, with project CRUD and resource linking/unlinking.
 - SQLite-backed `LearningGoalRepository` under `src/main/projects/`, with goal CRUD, status updates, completion timestamps, and project progress calculation.
-- Phase 1 Project-Centered Learning UI in the center Learning Workspace: project selector, "New Project" form, All Resources view, per-project linked-resource view, and link/unlink controls for resources.
+- Phase 1 Project-Centered Learning UI: left sidebar project/goal tree with "New Project" button and form (moved from center), center Learning Workspace with streamlined goals/resources/mentor (no top Projects box or workspace header), All Resources view, per-project linked-resource view, and link/unlink controls.
 - Phase 2 goal UI in the center Learning Workspace: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
-- Learning Workspace moved into the primary center panel so selected projects and goals become the main working context.
-- Multi-tab browser moved to the right panel while retaining tabs, address bar, navigation, transcript capture, and the Electron `WebContentsView` bounds flow.
+- Learning Workspace streamlined in primary center panel (transcript notices, goals, resources, mentor chat) with project context driven by left sidebar selection.
+- Multi-tab browser moved to the right panel while retaining tabs, address bar, navigation, transcript capture, PDF import on New Tab, and the Electron `WebContentsView` bounds flow.
 - Transcript captures and PDF imports can be linked to the active project and active goal so newly captured learning material lands in the right context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.

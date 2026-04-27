@@ -299,6 +299,10 @@ export default function App(): ReactElement {
   const [selectedGoalId, setSelectedGoalId] = useState('')
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [selectedResourceLinks, setSelectedResourceLinks] = useState<ProjectResourceLink[]>([])
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false)
+  const [newProjectTitle, setNewProjectTitle] = useState('')
+  const [newProjectDescription, setNewProjectDescription] = useState('')
+  const [newProjectType, setNewProjectType] = useState<'course' | 'build' | 'skill' | 'general'>('general')
   const [showNewGoalForm, setShowNewGoalForm] = useState(false)
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
   const [goalTitle, setGoalTitle] = useState('')
@@ -580,6 +584,32 @@ export default function App(): ReactElement {
     }
   }
 
+  const createProject = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    const title = newProjectTitle.trim()
+
+    if (!title) {
+      return
+    }
+
+    const input: ProjectInput = {
+      title,
+      description: newProjectDescription,
+      type: newProjectType,
+      notes: ''
+    }
+    const project = await window.improvement.createProject(input)
+
+    setProjects((items) => [project, ...items])
+    setGoalsByProject((items) => ({ ...items, [project.id]: [] }))
+    setExpandedProjectIds((items) => new Set([...items, project.id]))
+    setNewProjectTitle('')
+    setNewProjectDescription('')
+    setNewProjectType('general')
+    setShowNewProjectForm(false)
+    await selectProject(project.id)
+  }
+
   const resetGoalForm = (): void => {
     setEditingGoalId(null)
     setGoalTitle('')
@@ -829,9 +859,42 @@ export default function App(): ReactElement {
               <section className="project-tree-panel">
                 <p className="eyebrow">Projects</p>
                 <h2>Learning map</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowNewProjectForm((value) => !value)}
+                >
+                  {showNewProjectForm ? 'Cancel' : 'New Project'}
+                </button>
+                {showNewProjectForm && (
+                  <form className="new-project-form" onSubmit={createProject}>
+                    <input
+                      value={newProjectTitle}
+                      onChange={(event) => setNewProjectTitle(event.target.value)}
+                      placeholder="Project title"
+                      required
+                    />
+                    <textarea
+                      value={newProjectDescription}
+                      onChange={(event) => setNewProjectDescription(event.target.value)}
+                      placeholder="Description (optional)"
+                    />
+                    <select
+                      value={newProjectType}
+                      onChange={(event) => setNewProjectType(event.target.value as 'course' | 'build' | 'skill' | 'general')}
+                    >
+                      <option value="general">General</option>
+                      <option value="course">Course</option>
+                      <option value="build">Build</option>
+                      <option value="skill">Skill</option>
+                    </select>
+                    <button type="submit" disabled={newProjectTitle.trim().length === 0}>
+                      Create Project
+                    </button>
+                  </form>
+                )}
                 <div className="project-tree">
                   {projects.length === 0 ? (
-                    <p className="empty-goals">Create a project in the workspace to start building your learning map.</p>
+                    <p className="empty-goals">No projects yet. Use "New Project" above to get started.</p>
                   ) : (
                     projects.map((project) => {
                       const projectGoals = goalsByProject[project.id] ?? []

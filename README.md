@@ -29,34 +29,30 @@ We believe that with the right guidance, structure, and tools, anyone can develo
 
 ---
 
-## Key Features (Planned)
+## Key Features
 
-- **Built-in Multi-Tab Browser** — Consume articles, videos, and technical resources directly in the app
-- **AI Mentor (Grok-powered)** — Context-aware guidance that knows your learning history
-- **Smart Capture** — Highlight text or video segments and send them to the AI for processing
-- **Learning Workspace** — Notes, AI explanations, and interactive visualizations in one place
-- **Task & Schedule Organizer** — Smart daily/weekly plans that respect your real life
-- **Knowledge Graph & Gap Analysis** — See what you know and what’s missing
-- **Visualizations** — Auto-generated diagrams, charts, and fabrication previews
-- **Future**: Calendar integration, mobile support, domain-specific modules
-
----
+- **Built-in Multi-Tab Browser** with New Tab page (including prominent Import PDF button), transcript capture for YouTube/HPAcademy, and native PDF viewing
+- **AI Mentor (Grok/xAI)** with RAG over local captured resources, streaming responses, learning-cell prompt starters (Explain/Visualize/Practice/Quiz), and follow-up chat
+- **Project-Centered Learning**: Left sidebar project/goal tree with New Project and New Goal flows; center Learning Workspace with goals, linked resources, notes, mentor, and progress tracking
+- **Smart Capture & Resources**: Text selection "Send to AI", PDF import/save/extract/link, unified resource library with SQLite FTS5 search
+- **Learning Workspace**: Streamlined center panel with transcript notices, goals management, resource review, session notes (localStorage), and visualizer placeholder
+- **Schedule Mode**: Left sidebar for time blocking (in progress)
+- **Persistence**: Tab state, resources, projects, goals, links in SQLite + userData
 
 ## Current Status
 
-- High-level specification complete (`docs/SPEC.md`)
-- Electron + React + TypeScript desktop shell created
-- Multi-tab browser prototype uses `WebContentsView` inside the center content rectangle
-- Mobile support planned for later
-- Website (improvement.app) will be completely redesigned
+A fully functional desktop prototype with project-centered UI, multi-tab browser (right panel), streamlined center Learning Workspace (no top header or Projects box), left sidebar project tree, PDF/transcript capture, Grok mentor with local RAG, SQLite backend for resources/projects/goals, comprehensive tests, and polished Electron integration. See `IMPLEMENTATION.md` for detailed completed features, limitations, and next priorities (Phase 3: Knowledge Gaps).
+
+High-level spec in `docs/SPEC.md`. Runs on macOS (Electron + React + TS + Vite + Vitest).
 
 ---
 
 ## Documentation
 
-For a complete understanding of the project vision, features, user flows, and roadmap, please read:
+- **[IMPLEMENTATION.md](IMPLEMENTATION.md)**: Current architecture, completed features, limitations, testing status, and dev rules (updated after every change).
+- **[docs/SPEC.md](docs/SPEC.md)**: High-level vision, project-centered architecture, user personas, and roadmap (single source of truth for product direction).
 
-→ **[docs/SPEC.md](docs/SPEC.md)**
+Read both before contributing.
 
 This is the single source of truth for the Improvement project.
 
