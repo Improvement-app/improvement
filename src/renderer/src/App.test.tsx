@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { CapturedSelection, MentorStreamEvent, RendererApi, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
+import type { Project, ProjectInput, ProjectResourceLink } from '../../shared/projects'
 import type { CapturedResource } from '../../shared/resources'
 
 const tabsSnapshot: TabsSnapshot = {
@@ -41,6 +42,8 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
   let transcriptCapture: ((event: TranscriptCaptureEvent) => void) | null = null
   let mentorStream: ((event: MentorStreamEvent) => void) | null = null
   const resources: CapturedResource[] = [...initialResources]
+  const projects: Project[] = []
+  const links: ProjectResourceLink[] = []
 
   const api: RendererApi = {
     createTab: vi.fn().mockResolvedValue(tabsSnapshot),
@@ -60,6 +63,54 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       }
       return Promise.resolve()
     }),
+    getProjects: vi.fn().mockImplementation(() => Promise.resolve(projects)),
+    createProject: vi.fn().mockImplementation((input: ProjectInput) => {
+      const project: Project = {
+        id: `project-${projects.length + 1}`,
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        status: input.status ?? 'active',
+        createdAt: input.createdAt ?? '2026-04-26T12:00:00.000Z',
+        targetDate: input.targetDate,
+        notes: input.notes
+      }
+      projects.unshift(project)
+      return Promise.resolve(project)
+    }),
+    updateProject: vi.fn().mockResolvedValue(null),
+    deleteProject: vi.fn().mockResolvedValue(undefined),
+    linkResourceToProject: vi.fn().mockImplementation((resourceId: string, projectId: string) => {
+      const existing = links.find((link) => link.resourceId === resourceId && link.projectId === projectId)
+      if (!existing) {
+        const project = projects.find((item) => item.id === projectId)
+        if (project) {
+          links.push({
+            id: `link-${links.length + 1}`,
+            resourceId,
+            projectId,
+            linkedAt: '2026-04-26T12:00:00.000Z',
+            notes: '',
+            relevanceScore: 1,
+            project
+          })
+        }
+      }
+      return Promise.resolve(links.filter((link) => link.resourceId === resourceId))
+    }),
+    unlinkResourceFromProject: vi.fn().mockImplementation((resourceId: string, projectId: string) => {
+      const index = links.findIndex((link) => link.resourceId === resourceId && link.projectId === projectId)
+      if (index >= 0) {
+        links.splice(index, 1)
+      }
+      return Promise.resolve(links.filter((link) => link.resourceId === resourceId))
+    }),
+    getResourceProjectLinks: vi.fn().mockImplementation((resourceId: string) =>
+      Promise.resolve(links.filter((link) => link.resourceId === resourceId))
+    ),
+    getProjectResources: vi.fn().mockImplementation((projectId: string) =>
+      Promise.resolve(resources.filter((resource) => links.some((link) => link.projectId === projectId && link.resourceId === resource.id)))
+    ),
     importPdfResource: vi.fn().mockResolvedValue(null),
     openPdfResource: vi.fn().mockResolvedValue(tabsSnapshot),
     getXaiStatus: vi.fn().mockResolvedValue({
@@ -345,6 +396,40 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Open PDF in Browser' }))
 
     expect(api.openPdfResource).toHaveBeenCalledWith('pdf-1')
+  })
+
+  it('creates projects and links resources to them', async () => {
+    const user = userEvent.setup()
+    const { api } = installImprovementMock([
+      {
+        id: 'resource-1',
+        type: 'pdf',
+        source: 'file-upload',
+        title: 'Chassis Stiffness Notes',
+        content: 'Notes about torsional rigidity.',
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        metadata: {},
+        tags: ['pdf']
+      }
+    ])
+
+    render(<App />)
+
+    expect((await screen.findAllByText('Chassis Stiffness Notes')).length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Spec Miata Build')
+    await user.type(screen.getByPlaceholderText('What are you trying to learn or build?'), 'Organize chassis and engine resources.')
+    await user.selectOptions(screen.getByDisplayValue('General'), 'build')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
+    await user.selectOptions(await screen.findByLabelText('Current project'), 'All Resources')
+    await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Spec Miata Build')
+
+    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1')
+    expect(await screen.findByText('Linked to Spec Miata Build')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Current project'), 'Spec Miata Build')
+    expect(await screen.findByText('1 linked')).toBeInTheDocument()
   })
 
   it('saves session notes to local storage', async () => {

@@ -16,6 +16,7 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
+import type { ProjectInput, ProjectUpdate } from '../shared/projects'
 import type { CapturedResource } from '../shared/resources'
 import {
   createPersistedTabState,
@@ -27,6 +28,7 @@ import { importPdfResource } from './resources/pdf/PdfImporter'
 import { getTranscriptExtractor } from './transcript'
 
 type ResourceRepositoryInstance = import('./resources/ResourceRepository').ResourceRepository
+type ProjectRepositoryInstance = import('./projects/ProjectRepository').ProjectRepository
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -56,6 +58,7 @@ let mentorBusy = false
 let isQuitting = false
 let hasSavedTabsForQuit = false
 let resourceRepository: ResourceRepositoryInstance | null = null
+let projectRepository: ProjectRepositoryInstance | null = null
 const tabs = new Map<TabId, ManagedTab>()
 
 interface XaiChatMessage {
@@ -326,7 +329,16 @@ async function captureActiveTranscript(): Promise<TranscriptCaptureEvent> {
     await resourceRepository?.save(resource)
   }
 
-  return extractor.createWorkspaceEvent(result)
+  const event = extractor.createWorkspaceEvent(result)
+
+  if (event.type === 'captured' && resource) {
+    return {
+      ...event,
+      resource
+    }
+  }
+
+  return event
 }
 
 async function initializeResourceRepository(): Promise<void> {
@@ -336,6 +348,16 @@ async function initializeResourceRepository(): Promise<void> {
   } catch (error) {
     console.warn('Captured resource storage is disabled because SQLite failed to initialize:', error)
     resourceRepository = null
+  }
+}
+
+async function initializeProjectRepository(): Promise<void> {
+  try {
+    const { ProjectRepository } = await import('./projects/ProjectRepository')
+    projectRepository = new ProjectRepository(app.getPath('userData'))
+  } catch (error) {
+    console.warn('Project storage is disabled because SQLite failed to initialize:', error)
+    projectRepository = null
   }
 }
 
@@ -363,6 +385,14 @@ async function importPdf(): Promise<CapturedResource | null> {
   createTab(resource.url)
 
   return resource
+}
+
+function ensureProjectRepository(): ProjectRepositoryInstance {
+  if (!projectRepository) {
+    throw new Error('Project storage is not available.')
+  }
+
+  return projectRepository
 }
 
 async function openPdfResource(resourceId: string): Promise<TabsSnapshot> {
@@ -889,6 +919,7 @@ function createMainWindow(): void {
 app.whenReady().then(async () => {
   configureBrowserSession()
   await initializeResourceRepository()
+  await initializeProjectRepository()
 
   ipcMain.handle(ipcChannels.createTab, (_event, url?: string) => createTab(url))
   ipcMain.handle(ipcChannels.closeTab, (_event, tabId: TabId) => closeTab(tabId))
@@ -922,6 +953,24 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.deleteCapturedResource, async (_event, id: string) => {
     await resourceRepository?.delete(id)
   })
+  ipcMain.handle(ipcChannels.getProjects, async () => projectRepository?.getAll() ?? [])
+  ipcMain.handle(ipcChannels.createProject, async (_event, project: ProjectInput) => ensureProjectRepository().create(project))
+  ipcMain.handle(ipcChannels.updateProject, async (_event, project: ProjectUpdate) => ensureProjectRepository().update(project))
+  ipcMain.handle(ipcChannels.deleteProject, async (_event, id: string) => {
+    await ensureProjectRepository().delete(id)
+  })
+  ipcMain.handle(ipcChannels.linkResourceToProject, async (_event, resourceId: string, projectId: string) => {
+    const projects = ensureProjectRepository()
+    await projects.linkResourceToProject({ resourceId, projectId })
+    return projects.getLinksForResource(resourceId)
+  })
+  ipcMain.handle(ipcChannels.unlinkResourceFromProject, async (_event, resourceId: string, projectId: string) => {
+    const projects = ensureProjectRepository()
+    await projects.unlinkResourceFromProject(resourceId, projectId)
+    return projects.getLinksForResource(resourceId)
+  })
+  ipcMain.handle(ipcChannels.getResourceProjectLinks, async (_event, resourceId: string) => projectRepository?.getLinksForResource(resourceId) ?? [])
+  ipcMain.handle(ipcChannels.getProjectResources, async (_event, projectId: string) => projectRepository?.getResourcesForProject(projectId) ?? [])
   ipcMain.handle(ipcChannels.importPdfResource, () => importPdf())
   ipcMain.handle(ipcChannels.openPdfResource, (_event, id: string) => openPdfResource(id))
   ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {
@@ -977,6 +1026,8 @@ app.whenReady().then(async () => {
   app.on('will-quit', () => {
     resourceRepository?.close()
     resourceRepository = null
+    projectRepository?.close()
+    projectRepository = null
   })
 
   app.on('activate', () => {

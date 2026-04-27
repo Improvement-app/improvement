@@ -9,6 +9,7 @@ import type {
   TranscriptCaptureEvent,
   XaiStatus
 } from '../../shared/ipc'
+import type { Project, ProjectInput, ProjectResourceLink, ProjectType } from '../../shared/projects'
 import type { CapturedResource } from '../../shared/resources'
 
 const initialSnapshot: TabsSnapshot = {
@@ -259,16 +260,29 @@ export default function App(): ReactElement {
   const [copiedResourceId, setCopiedResourceId] = useState<string | null>(null)
   const [transcriptNotice, setTranscriptNotice] = useState<TranscriptCaptureEvent | null>(null)
   const [capturedResources, setCapturedResources] = useState<CapturedResource[]>([])
+  const [projectResources, setProjectResources] = useState<CapturedResource[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
+  const [selectedResourceLinks, setSelectedResourceLinks] = useState<ProjectResourceLink[]>([])
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false)
+  const [newProjectTitle, setNewProjectTitle] = useState('')
+  const [newProjectDescription, setNewProjectDescription] = useState('')
+  const [newProjectType, setNewProjectType] = useState<ProjectType>('general')
   const [showTranscriptTimestamps, setShowTranscriptTimestamps] = useState(false)
   const [isImportingPdf, setIsImportingPdf] = useState(false)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
   const canCaptureTranscript = Boolean(activeTab && (isYouTubeWatchPage(activeTab.url) || isHPAcademyVideoPage(activeTab.url)))
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId]
+  )
+  const displayedResources = selectedProject ? projectResources : capturedResources
   const selectedResource = useMemo(
-    () => capturedResources.find((resource) => resource.id === selectedResourceId) ?? capturedResources[0] ?? null,
-    [capturedResources, selectedResourceId]
+    () => displayedResources.find((resource) => resource.id === selectedResourceId) ?? displayedResources[0] ?? null,
+    [displayedResources, selectedResourceId]
   )
 
   useEffect(() => {
@@ -276,6 +290,7 @@ export default function App(): ReactElement {
       setMentorError('Unable to read xAI API key status from the main process.')
     })
     void loadCapturedResources()
+    void loadProjects()
 
     const disposeTabs = window.improvement.onTabsChanged((nextSnapshot) => {
       setSnapshot(nextSnapshot)
@@ -342,9 +357,17 @@ export default function App(): ReactElement {
     try {
       const resources = await window.improvement.getCapturedResources()
       const nextResources = resources.length > 0 || !fallback ? resources : [fallback]
+      let nextProjectResources: CapturedResource[] = []
       setCapturedResources(nextResources)
+      if (selectedProjectId) {
+        nextProjectResources = await window.improvement.getProjectResources(selectedProjectId)
+        setProjectResources(nextProjectResources)
+      }
+      const visibleResources = selectedProjectId ? nextProjectResources : nextResources
       setSelectedResourceId((currentId) =>
-        currentId && nextResources.some((resource) => resource.id === currentId) ? currentId : nextResources[0]?.id ?? null
+        currentId && visibleResources.some((resource) => resource.id === currentId)
+          ? currentId
+          : visibleResources[0]?.id ?? null
       )
     } catch {
       if (fallback) {
@@ -354,6 +377,36 @@ export default function App(): ReactElement {
       setMentorError('Unable to load saved learning resources.')
     }
   }
+
+  const loadProjects = async (): Promise<void> => {
+    try {
+      setProjects(await window.improvement.getProjects())
+    } catch {
+      setMentorError('Unable to load projects.')
+    }
+  }
+
+  const loadProjectResources = async (projectId: string): Promise<CapturedResource[]> => {
+    if (!projectId) {
+      setProjectResources([])
+      return []
+    }
+
+    const resources = await window.improvement.getProjectResources(projectId)
+    setProjectResources(resources)
+    return resources
+  }
+
+  useEffect(() => {
+    if (!selectedResource) {
+      setSelectedResourceLinks([])
+      return
+    }
+
+    window.improvement.getResourceProjectLinks(selectedResource.id).then(setSelectedResourceLinks).catch(() => {
+      setSelectedResourceLinks([])
+    })
+  }, [selectedResource?.id])
 
   useEffect(() => {
     const frame = browserFrameRef.current
@@ -404,6 +457,42 @@ export default function App(): ReactElement {
     setTemporaryApiKey('')
   }
 
+  const selectProject = async (projectId: string): Promise<void> => {
+    setSelectedProjectId(projectId)
+    if (!projectId) {
+      setProjectResources([])
+      setSelectedResourceId(capturedResources[0]?.id ?? null)
+      return
+    }
+
+    const resources = await loadProjectResources(projectId)
+    setSelectedResourceId(resources[0]?.id ?? null)
+  }
+
+  const createProject = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    const title = newProjectTitle.trim()
+
+    if (!title) {
+      return
+    }
+
+    const input: ProjectInput = {
+      title,
+      description: newProjectDescription,
+      type: newProjectType,
+      notes: ''
+    }
+    const project = await window.improvement.createProject(input)
+
+    setProjects((items) => [project, ...items])
+    setNewProjectTitle('')
+    setNewProjectDescription('')
+    setNewProjectType('general')
+    setShowNewProjectForm(false)
+    await selectProject(project.id)
+  }
+
   const saveNotes = (): void => {
     const savedAt = new Date().toISOString()
     window.localStorage.setItem('improvement.notes', notes)
@@ -429,7 +518,10 @@ export default function App(): ReactElement {
 
     if (event.type === 'captured') {
       setMentorError(null)
-      const fallbackResource = resourceFromTranscriptEvent(event)
+      const fallbackResource = event.resource ?? resourceFromTranscriptEvent(event)
+      if (selectedProjectId && event.resource) {
+        await window.improvement.linkResourceToProject(event.resource.id, selectedProjectId)
+      }
       await loadCapturedResources(fallbackResource)
       return
     }
@@ -483,6 +575,9 @@ export default function App(): ReactElement {
       const resource = await window.improvement.importPdfResource()
 
       if (resource) {
+        if (selectedProjectId) {
+          await window.improvement.linkResourceToProject(resource.id, selectedProjectId)
+        }
         await loadCapturedResources(resource)
         setSelectedResourceId(resource.id)
       }
@@ -498,6 +593,44 @@ export default function App(): ReactElement {
       setSnapshot(await window.improvement.openPdfResource(resource.id))
     } catch {
       setMentorError('Unable to open this PDF in the browser.')
+    }
+  }
+
+  const isSelectedResourceLinkedToProject = Boolean(
+    selectedProjectId && selectedResourceLinks.some((link) => link.projectId === selectedProjectId)
+  )
+
+  const linkSelectedResourceToProject = async (): Promise<void> => {
+    if (!selectedResource || !selectedProjectId) {
+      return
+    }
+
+    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, selectedProjectId))
+    await loadProjectResources(selectedProjectId)
+  }
+
+  const linkSelectedResourceToProjectId = async (projectId: string): Promise<void> => {
+    if (!selectedResource || !projectId) {
+      return
+    }
+
+    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, projectId))
+    if (projectId === selectedProjectId) {
+      await loadProjectResources(projectId)
+    }
+  }
+
+  const unlinkSelectedResourceFromProject = async (projectId: string): Promise<void> => {
+    if (!selectedResource) {
+      return
+    }
+
+    setSelectedResourceLinks(await window.improvement.unlinkResourceFromProject(selectedResource.id, projectId))
+    if (selectedProjectId) {
+      const resources = await loadProjectResources(selectedProjectId)
+      if (!resources.some((resource) => resource.id === selectedResource.id)) {
+        setSelectedResourceId(resources[0]?.id ?? null)
+      }
     }
   }
 
@@ -714,6 +847,64 @@ export default function App(): ReactElement {
                 </section>
               )}
 
+              <section className="projects-card">
+                <div className="card-header">
+                  <div>
+                    <h3>Projects</h3>
+                    <span>Organize resources around courses, builds, and skill paths.</span>
+                  </div>
+                  <button type="button" onClick={() => setShowNewProjectForm((value) => !value)}>
+                    {showNewProjectForm ? 'Cancel' : 'New Project'}
+                  </button>
+                </div>
+
+                <label className="project-selector">
+                  <span>Current project</span>
+                  <select value={selectedProjectId} onChange={(event) => void selectProject(event.target.value)}>
+                    <option value="">All Resources</option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {showNewProjectForm && (
+                  <form className="new-project-form" onSubmit={createProject}>
+                    <input
+                      value={newProjectTitle}
+                      onChange={(event) => setNewProjectTitle(event.target.value)}
+                      placeholder="Project title"
+                    />
+                    <textarea
+                      value={newProjectDescription}
+                      onChange={(event) => setNewProjectDescription(event.target.value)}
+                      placeholder="What are you trying to learn or build?"
+                    />
+                    <select value={newProjectType} onChange={(event) => setNewProjectType(event.target.value as ProjectType)}>
+                      <option value="general">General</option>
+                      <option value="course">Course</option>
+                      <option value="build">Build</option>
+                      <option value="skill">Skill</option>
+                    </select>
+                    <button type="submit" disabled={newProjectTitle.trim().length === 0}>
+                      Create Project
+                    </button>
+                  </form>
+                )}
+
+                {selectedProject && (
+                  <div className="project-summary">
+                    <strong>{selectedProject.title}</strong>
+                    <span>{selectedProject.description || 'No description yet.'}</span>
+                    <small>
+                      {projectResources.length} linked {projectResources.length === 1 ? 'resource' : 'resources'}
+                    </small>
+                  </div>
+                )}
+              </section>
+
               <section className="resource-import-card">
                 <div>
                   <h3>Resources</h3>
@@ -724,16 +915,18 @@ export default function App(): ReactElement {
                 </button>
               </section>
 
-              {capturedResources.length > 0 && (
+              {displayedResources.length > 0 && (
                 <section className="captured-transcripts-card resource-library-card">
                   <div className="card-header">
                     <div>
-                      <h3>Captured resources</h3>
-                      <span>{capturedResources.length} saved locally</span>
+                      <h3>{selectedProject ? 'Project resources' : 'Captured resources'}</h3>
+                      <span>
+                        {displayedResources.length} {selectedProject ? 'linked' : 'saved locally'}
+                      </span>
                     </div>
                   </div>
                   <div className="resource-list">
-                    {capturedResources.map((resource) => (
+                    {displayedResources.map((resource) => (
                       <button
                         type="button"
                         key={resource.id}
@@ -758,8 +951,42 @@ export default function App(): ReactElement {
                           <span>
                             {selectedResource.type} · {selectedResource.url ? formatHostname(selectedResource.url) : selectedResource.source}
                           </span>
+                          {selectedResourceLinks.length > 0 && (
+                            <span className="linked-projects">
+                              Linked to {selectedResourceLinks.map((link) => link.project.title).join(', ')}
+                            </span>
+                          )}
                         </div>
                         <div className="resource-actions">
+                          {!selectedProjectId && projects.length > 0 && (
+                            <select
+                              aria-label="Link selected resource to project"
+                              defaultValue=""
+                              onChange={(event) => {
+                                void linkSelectedResourceToProjectId(event.target.value)
+                                event.currentTarget.value = ''
+                              }}
+                            >
+                              <option value="">Link to project...</option>
+                              {projects.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                  {project.title}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {selectedProjectId && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                isSelectedResourceLinkedToProject
+                                  ? void unlinkSelectedResourceFromProject(selectedProjectId)
+                                  : void linkSelectedResourceToProject()
+                              }
+                            >
+                              {isSelectedResourceLinkedToProject ? 'Unlink Project' : 'Link to Project'}
+                            </button>
+                          )}
                           {selectedResource.type === 'pdf' && (
                             <button type="button" onClick={() => void openPdfInBrowser(selectedResource)}>
                               Open PDF in Browser
@@ -785,6 +1012,15 @@ export default function App(): ReactElement {
                           </button>
                         </div>
                       </div>
+                      {selectedProject && (
+                        <button
+                          type="button"
+                          className="unlink-project-resource"
+                          onClick={() => void unlinkSelectedResourceFromProject(selectedProject.id)}
+                        >
+                          Remove from {selectedProject.title}
+                        </button>
+                      )}
                       {selectedResource.type === 'transcript' ? (
                         <TranscriptResourcePreview resource={selectedResource} showTimestamps={showTranscriptTimestamps} />
                       ) : (

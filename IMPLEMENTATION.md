@@ -6,7 +6,7 @@ Last updated: April 26, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the center browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser, an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, Phase 1 project-centered resource linking, collapsible task and learning sidebars, and a polished right-side learning workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -23,6 +23,9 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - Unified `CapturedResource` model for transcripts, PDFs, articles, textbooks, notes, and future resource types.
 - SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
 - SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
+- SQLite-backed `ProjectRepository` under `src/main/projects/`, stored in the same `resources.db`, with project CRUD and resource linking/unlinking.
+- Phase 1 Project-Centered Learning UI in the right sidebar: project selector, "New Project" form, All Resources view, per-project linked-resource view, and link/unlink controls for resources.
+- Transcript captures and PDF imports can be linked to the active project so newly captured learning material lands in the right project context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
 - Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
@@ -55,31 +58,29 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - HPAcademy transcript capture depends on the visible transcript window being present in the page DOM.
 - No packaged installer or auto-update flow exists yet.
 
-## Current Architecture – Project Layer (Planned)
+## Current Architecture – Project Layer
 
-Status: **Not yet implemented – documentation only**.
+Status: **Phase 1 implemented – Projects + Resource Linking**.
 
-Improvement is moving toward a project-centered learning model where captured resources, goals, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, but a new project layer will sit above it.
+Improvement is moving toward a project-centered learning model where captured resources, goals, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, with the new project layer now connecting resources to user-defined learning projects.
 
-Next implementation priority: **Phase 1 = Projects + Resource Linking**.
+Next implementation priority: **Phase 2 = Learning Goals + Progress Tracking**.
 
-### Proposed Database Schema
+### Implemented Database Schema
 
 **`projects`**
 
 Purpose: Stores the central project containers that organize learning.
 
-Suggested fields:
+Implemented fields:
 - `id TEXT PRIMARY KEY`
 - `title TEXT NOT NULL`
 - `description TEXT`
-- `type TEXT NOT NULL` — examples: `course`, `build`, `skill`, `research`
-- `status TEXT NOT NULL` — examples: `active`, `paused`, `completed`, `archived`
-- `source TEXT` — examples: `hpacademy`, `udemy`, `manual`, `real-world-build`
-- `source_url TEXT`
+- `type TEXT NOT NULL` — allowed values: `course`, `build`, `skill`, `general`
+- `status TEXT NOT NULL` — allowed values: `active`, `paused`, `completed`, `archived`
 - `created_at TEXT NOT NULL`
-- `updated_at TEXT NOT NULL`
-- `metadata_json TEXT NOT NULL DEFAULT '{}'` — flexible project-specific data such as course provider, module count, build vehicle, engine family, or domain tags
+- `target_date TEXT`
+- `notes TEXT`
 
 Examples:
 - **Engine Building Fundamentals** from HPAcademy
@@ -88,6 +89,8 @@ Examples:
 - **Metallurgy Mastery** as a skill-focused project
 
 **`learning_goals`**
+
+Status: planned for Phase 2.
 
 Purpose: Stores specific, trackable objectives inside a project.
 
@@ -110,6 +113,8 @@ Example:
 
 **`knowledge_gaps`**
 
+Status: planned for Phase 3.
+
 Purpose: Stores manually or automatically identified gaps tied to a project and optionally to a goal.
 
 Suggested fields:
@@ -131,18 +136,16 @@ Example:
 
 **`resource_links`**
 
-Purpose: Connects a `CapturedResource` to a Project and optionally to a LearningGoal or KnowledgeGap.
+Purpose: Connects a `CapturedResource` to a Project.
 
-Suggested fields:
+Implemented fields:
 - `id TEXT PRIMARY KEY`
 - `resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE`
 - `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
-- `learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL`
-- `knowledge_gap_id TEXT REFERENCES knowledge_gaps(id) ON DELETE SET NULL`
-- `link_type TEXT NOT NULL` — examples: `primary`, `supporting`, `evidence`, `practice`, `decision`
-- `note TEXT`
-- `created_at TEXT NOT NULL`
-- `metadata_json TEXT NOT NULL DEFAULT '{}'`
+- `linked_at TEXT NOT NULL`
+- `notes TEXT`
+- `relevance_score REAL NOT NULL DEFAULT 1`
+- `UNIQUE(resource_id, project_id)`
 
 Design notes:
 - A single resource can link to multiple projects.
@@ -150,11 +153,11 @@ Design notes:
 - Resource links should eventually improve RAG retrieval by letting the AI mentor search within the active project first, then broaden to related projects or the full library.
 - This schema is intentionally compatible with future vector embeddings and chunk-level resource links.
 
-### Planned Implementation Phases
+### Implementation Phases
 
 **Phase 1 – Projects + Resource Linking**
 
-Create CRUD support for projects, allow captured resources to be linked to one or more projects, and make the right sidebar show project associations. RAG should prefer resources linked to the active project when one is selected.
+Complete. The app now supports project CRUD through `ProjectRepository`, resource linking/unlinking through `resource_links`, IPC/preload APIs for project operations, and right-sidebar UI for creating projects, selecting project context, viewing linked resources, and linking/unlinking saved resources. RAG is still global and will be made project-aware in a later phase.
 
 **Phase 2 – Learning Goals + Progress Tracking**
 
@@ -176,6 +179,8 @@ Current test coverage includes:
 - Clean transcript resource rendering, timestamp toggling, and full transcript copying.
 - SQLite resource repository save/load, updates, search, type filtering, and deletion.
 - SQLite FTS5 relevant-resource search, including index synchronization on save/update/delete.
+- SQLite project repository CRUD and resource linking/unlinking.
+- Renderer project creation, project selection, and resource linking controls.
 - PDF filename cleanup and PDF resource browser-opening behavior.
 - Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.
@@ -186,9 +191,9 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 ## Next Priorities
 
-- Projects + Resource Linking (Phase 1).
 - Learning Goals + Progress Tracking (Phase 2).
 - Knowledge Gap Detection + Recommendations (Phase 3).
+- Make RAG prefer resources linked to the active project, then broaden to all resources when needed.
 - Add article, textbook, broader file-upload, and persisted note capture flows using the `CapturedResource` model.
 - Persist notes and mentor sessions in the local-first database.
 - Add vector embeddings and chunk-level semantic retrieval alongside FTS5.

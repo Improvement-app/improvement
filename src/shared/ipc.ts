@@ -1,4 +1,5 @@
 import type { CapturedResource } from './resources'
+import type { Project, ProjectInput, ProjectResourceLink, ProjectUpdate } from './projects'
 
 export type TabId = string
 
@@ -34,6 +35,7 @@ export type TranscriptCaptureEvent =
       type: 'captured'
       capture: CapturedSelection
       capturedAt: string
+      resource?: CapturedResource
     }
   | {
       type: 'unavailable'
@@ -89,6 +91,14 @@ export interface RendererApi {
   getCapturedResources: () => Promise<CapturedResource[]>
   searchCapturedResources: (query: string) => Promise<CapturedResource[]>
   deleteCapturedResource: (id: string) => Promise<void>
+  getProjects: () => Promise<Project[]>
+  createProject: (project: ProjectInput) => Promise<Project>
+  updateProject: (project: ProjectUpdate) => Promise<Project | null>
+  deleteProject: (id: string) => Promise<void>
+  linkResourceToProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
+  unlinkResourceFromProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
+  getResourceProjectLinks: (resourceId: string) => Promise<ProjectResourceLink[]>
+  getProjectResources: (projectId: string) => Promise<CapturedResource[]>
   importPdfResource: () => Promise<CapturedResource | null>
   openPdfResource: (id: string) => Promise<TabsSnapshot>
   getXaiStatus: () => Promise<XaiStatus>
@@ -114,6 +124,14 @@ export const ipcChannels = {
   getCapturedResources: 'resources:get-all',
   searchCapturedResources: 'resources:search',
   deleteCapturedResource: 'resources:delete',
+  getProjects: 'projects:get-all',
+  createProject: 'projects:create',
+  updateProject: 'projects:update',
+  deleteProject: 'projects:delete',
+  linkResourceToProject: 'projects:link-resource',
+  unlinkResourceFromProject: 'projects:unlink-resource',
+  getResourceProjectLinks: 'projects:get-resource-links',
+  getProjectResources: 'projects:get-resources',
   importPdfResource: 'resources:import-pdf',
   openPdfResource: 'resources:open-pdf',
   tabsChanged: 'tabs:changed',

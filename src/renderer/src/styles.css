@@ -292,6 +292,7 @@ h3 {
 .notes-card,
 .learning-actions-card,
 .transcript-card,
+.projects-card,
 .resource-import-card,
 .captured-transcripts-card,
 .mentor-message,
@@ -326,6 +327,73 @@ h3 {
   color: #667085;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.projects-card {
+  display: grid;
+  gap: 12px;
+}
+
+.project-selector,
+.new-project-form {
+  display: grid;
+  gap: 7px;
+}
+
+.project-selector span {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-selector select,
+.new-project-form input,
+.new-project-form textarea,
+.new-project-form select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #d7deea;
+  border-radius: 11px;
+  background: #fbfdff;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+}
+
+.new-project-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.project-summary {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #eff6ff;
+}
+
+.project-summary strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.project-summary span,
+.project-summary small,
+.linked-projects {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.linked-projects {
+  display: block;
+  margin-top: 4px;
+}
+
+.unlink-project-resource {
+  justify-self: start;
 }
 
 .transcript-card {
@@ -493,6 +561,16 @@ h3 {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.resource-actions select {
+  max-width: 150px;
+  padding: 7px 8px;
+  border: 1px solid #d7deea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
 }
 
 .resource-preview-header {
