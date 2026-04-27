@@ -25,6 +25,12 @@ textarea {
   font: inherit;
 }
 
+textarea {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 button {
   border: 0;
 }
@@ -269,6 +275,63 @@ h3 {
   gap: 12px;
 }
 
+.project-tree-panel .new-project-button {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d7deea;
+  border-radius: 999px;
+  background: #f0f4ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.project-tree-panel .new-project-button:hover {
+  background: #e0ecff;
+  border-color: #bfdbfe;
+}
+
+.project-tree-panel .new-project-form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e3e8f2;
+  border-radius: 12px;
+}
+
+.project-tree-panel .new-project-form input,
+.project-tree-panel .new-project-form textarea,
+.project-tree-panel .new-project-form select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #d7deea;
+  border-radius: 10px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.project-tree-panel .new-project-form button {
+  padding: 8px 12px;
+  background: #1d4ed8;
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-tree-panel .new-project-form button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
 .project-tree,
 .schedule-grid {
   display: grid;
@@ -437,10 +500,16 @@ h3 {
 
 .goal-row span,
 .goal-row small,
-.empty-goals {
+.empty-goals,
+.mentor-message p,
+.resource-preview pre,
+.transcript-readable {
   color: #667085;
   font-size: 12px;
   line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .goal-actions {
@@ -968,6 +1037,9 @@ textarea {
   min-height: 150px;
   margin: 0;
   background: #ffffff;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .learning-actions-card {
