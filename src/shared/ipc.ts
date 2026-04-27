@@ -103,7 +103,7 @@ export interface RendererApi {
   getProjects: () => Promise<Project[]>
   createProject: (project: ProjectInput) => Promise<Project>
   updateProject: (project: ProjectUpdate) => Promise<Project | null>
-  deleteProject: (id: string) => Promise<void>
+  deleteProject: (id: string, deleteAssociatedResources?: boolean) => Promise<void>
   linkResourceToProject: (resourceId: string, projectId: string, learningGoalId?: string | null) => Promise<ProjectResourceLink[]>
   unlinkResourceFromProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
   getResourceProjectLinks: (resourceId: string) => Promise<ProjectResourceLink[]>

@@ -670,6 +670,24 @@ export default function App(): ReactElement {
     await loadLearningGoals(goal.projectId)
   }
 
+  const deleteProject = async (id: string): Promise<void> => {
+    const deleteResources = confirm(
+      'Delete this project and its goals?\n\n' +
+      'OK = also permanently delete associated resources (PDFs, transcripts, notes, etc.).\n' +
+      'Cancel = keep resources (just unlink from this project).'
+    )
+    await window.improvement.deleteProject(id, deleteResources)
+    await loadProjects()
+    if (selectedProjectId === id) {
+      setSelectedProjectId('')
+      setLearningGoals([])
+      setProjectProgress(null)
+      setSelectedGoalId('')
+      setSelectedResourceId(null)
+      setSelectedResourceLinks([])
+    }
+  }
+
   const saveNotes = (): void => {
     const savedAt = new Date().toISOString()
     window.localStorage.setItem('improvement.notes', notes)
@@ -919,6 +937,17 @@ export default function App(): ReactElement {
                               <span>
                                 {project.type} · {projectGoals.length} {projectGoals.length === 1 ? 'goal' : 'goals'}
                               </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="tree-delete"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void deleteProject(project.id)
+                              }}
+                              title="Delete project"
+                            >
+                              ×
                             </button>
                           </div>
                           {expanded && (

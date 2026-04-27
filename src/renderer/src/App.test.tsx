@@ -92,7 +92,7 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       return Promise.resolve(project)
     }),
     updateProject: vi.fn().mockResolvedValue(null),
-    deleteProject: vi.fn().mockResolvedValue(undefined),
+    deleteProject: vi.fn().mockImplementation((id: string, _deleteAssociatedResources = false) => Promise.resolve()),
     linkResourceToProject: vi.fn().mockImplementation((resourceId: string, projectId: string, learningGoalId?: string | null) => {
       const existing = links.find((link) => link.resourceId === resourceId && link.projectId === projectId)
       const learningGoal = learningGoalId ? goals.find((goal) => goal.id === learningGoalId) : undefined

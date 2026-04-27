@@ -140,6 +140,13 @@ export class ProjectRepository {
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(id)
   }
 
+  getLinkedResourceIds(projectId: string): string[] {
+    const rows = this.db
+      .prepare('SELECT resource_id FROM resource_links WHERE project_id = ?')
+      .all(projectId) as { resource_id: string }[]
+    return rows.map((row) => row.resource_id)
+  }
+
   async linkResourceToProject(input: {
     resourceId: string
     projectId: string

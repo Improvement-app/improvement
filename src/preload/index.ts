@@ -28,7 +28,7 @@ const api: RendererApi = {
   getProjects: () => ipcRenderer.invoke(ipcChannels.getProjects),
   createProject: (project: ProjectInput) => ipcRenderer.invoke(ipcChannels.createProject, project),
   updateProject: (project: ProjectUpdate) => ipcRenderer.invoke(ipcChannels.updateProject, project),
-  deleteProject: (id: string) => ipcRenderer.invoke(ipcChannels.deleteProject, id),
+  deleteProject: (id: string, deleteAssociatedResources?: boolean) => ipcRenderer.invoke(ipcChannels.deleteProject, id, deleteAssociatedResources),
   linkResourceToProject: (resourceId: string, projectId: string, learningGoalId?: string | null) =>
     ipcRenderer.invoke(ipcChannels.linkResourceToProject, resourceId, projectId, learningGoalId),
   unlinkResourceFromProject: (resourceId: string, projectId: string) =>

@@ -1059,8 +1059,16 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.getProjects, async () => projectRepository?.getAll() ?? [])
   ipcMain.handle(ipcChannels.createProject, async (_event, project: ProjectInput) => ensureProjectRepository().create(project))
   ipcMain.handle(ipcChannels.updateProject, async (_event, project: ProjectUpdate) => ensureProjectRepository().update(project))
-  ipcMain.handle(ipcChannels.deleteProject, async (_event, id: string) => {
-    await ensureProjectRepository().delete(id)
+  ipcMain.handle(ipcChannels.deleteProject, async (_event, id: string, deleteAssociatedResources = false) => {
+    const projectRepo = ensureProjectRepository()
+    if (deleteAssociatedResources && resourceRepository) {
+      // Delete resources linked to this project (links will cascade with project delete)
+      const linkedResourceIds = projectRepo.getLinkedResourceIds(id)
+      for (const resourceId of linkedResourceIds) {
+        await resourceRepository.delete(resourceId)
+      }
+    }
+    await projectRepo.delete(id)
   })
   ipcMain.handle(ipcChannels.linkResourceToProject, async (_event, resourceId: string, projectId: string, learningGoalId?: string | null) => {
     const projects = ensureProjectRepository()
