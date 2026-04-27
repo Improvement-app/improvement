@@ -1006,6 +1006,11 @@ function createMainWindow(): void {
     }
   })
 
+  // Re-apply browser view bounds after zoom (CMD-+/font scaling) to prevent detachment/overlap with learning pane
+  mainWindow.webContents.on('zoom-changed', () => {
+    setTimeout(applyActiveViewBounds, 100)
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {

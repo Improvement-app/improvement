@@ -507,9 +507,18 @@ export default function App(): ReactElement {
     observer.observe(frame)
     window.addEventListener('resize', updateBounds)
 
+    // Handle CMD-+/font scaling/zoom (visualViewport fires on scale changes in Electron/renderer)
+    const viewport = window.visualViewport
+    if (viewport) {
+      viewport.addEventListener('resize', updateBounds)
+    }
+
     return () => {
       observer.disconnect()
       window.removeEventListener('resize', updateBounds)
+      if (viewport) {
+        viewport.removeEventListener('resize', updateBounds)
+      }
     }
   }, [snapshot.activeTabId])
 
