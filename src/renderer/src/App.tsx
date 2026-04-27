@@ -861,7 +861,15 @@ export default function App(): ReactElement {
                 <h2>Learning map</h2>
                 <button
                   type="button"
-                  onClick={() => setShowNewProjectForm((value) => !value)}
+                  className="new-project-button"
+                  onClick={() => {
+                    if (showNewProjectForm) {
+                      setNewProjectTitle('')
+                      setNewProjectDescription('')
+                      setNewProjectType('general')
+                    }
+                    setShowNewProjectForm((value) => !value)
+                  }}
                 >
                   {showNewProjectForm ? 'Cancel' : 'New Project'}
                 </button>
