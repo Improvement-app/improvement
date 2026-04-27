@@ -31,7 +31,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 60px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
   background:
@@ -39,78 +39,6 @@ button {
     #e9eef6;
 }
 
-.top-bar {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  padding: 10px 18px;
-  border-bottom: 1px solid #d7deea;
-  background: rgba(248, 250, 252, 0.92);
-  color: #172033;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 230px;
-}
-
-.brand-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 11px;
-  background: #1d4ed8;
-  color: white;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-}
-
-.brand strong,
-.brand span {
-  display: block;
-}
-
-.brand strong {
-  font-size: 15px;
-}
-
-.brand span {
-  margin-top: 2px;
-  color: #667085;
-  font-size: 12px;
-}
-
-.top-bar-status {
-  justify-self: center;
-  display: flex;
-  align-items: center;
-  max-width: 420px;
-  min-width: 0;
-  gap: 10px;
-  padding: 7px 12px;
-  border: 1px solid #dbe3ef;
-  border-radius: 999px;
-  background: white;
-  color: #667085;
-  font-size: 12px;
-}
-
-.top-bar-status span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.top-bar-status strong {
-  color: #1d4ed8;
-  font-size: 12px;
-}
-
-.top-bar-actions,
 .nav-buttons {
   display: flex;
   align-items: center;

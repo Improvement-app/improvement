@@ -1,6 +1,6 @@
 # Improvement Implementation
 
-Last updated: April 26, 2026
+Last updated: April 27, 2026
 
 ## Current Status
 
@@ -11,7 +11,7 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 ## Completed Features
 
 - Electron + React + TypeScript project scaffold using `electron-vite`.
-- Desktop shell with top bar, dual-mode left sidebar, center Learning Workspace, and right-side multi-tab browser.
+- Desktop shell with dual-mode left sidebar, center Learning Workspace, and right-side multi-tab browser (no top bar; primary navigation and mode toggles live in the left panel and browser column).
 - Dual-mode left sidebar: Projects mode shows a project-goal tree, while Schedule mode shows local day time blocks that can be assigned to projects or goals.
 - Multi-tab browser backed by one `WebContentsView` per tab.
 - Tab persistence in Electron's `userData` folder, including URL, title, tab order, and last active tab restore.

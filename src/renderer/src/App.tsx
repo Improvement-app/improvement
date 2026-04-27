@@ -865,30 +865,6 @@ export default function App(): ReactElement {
 
   return (
     <main className="app-shell">
-      <header className="top-bar">
-        <div className="brand">
-          <div className="brand-mark">I</div>
-          <div>
-            <strong>Improvement</strong>
-            <span>AI mentor workspace</span>
-          </div>
-        </div>
-
-        <div className="top-bar-status">
-          <span>{activeTab ? formatHostname(activeTab.url) : 'Browser starting'}</span>
-          <strong>{activeTab?.isLoading ? 'Loading' : 'Ready'}</strong>
-        </div>
-
-        <div className="top-bar-actions">
-          <button type="button" className="ghost-button" onClick={() => setLeftMode('projects')}>
-            Projects
-          </button>
-          <button type="button" className="mentor-button" onClick={() => setLeftMode('schedule')}>
-            Schedule
-          </button>
-        </div>
-      </header>
-
       <section className="workspace">
         <aside className="sidebar left project-sidebar">
           <div className="panel-content navigation-panel">
