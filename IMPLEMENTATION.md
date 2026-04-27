@@ -55,6 +55,115 @@ The app currently includes a persistent multi-tab browser, an internal New Tab l
 - HPAcademy transcript capture depends on the visible transcript window being present in the page DOM.
 - No packaged installer or auto-update flow exists yet.
 
+## Current Architecture – Project Layer (Planned)
+
+Status: **Not yet implemented – documentation only**.
+
+Improvement is moving toward a project-centered learning model where captured resources, goals, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, but a new project layer will sit above it.
+
+Next implementation priority: **Phase 1 = Projects + Resource Linking**.
+
+### Proposed Database Schema
+
+**`projects`**
+
+Purpose: Stores the central project containers that organize learning.
+
+Suggested fields:
+- `id TEXT PRIMARY KEY`
+- `title TEXT NOT NULL`
+- `description TEXT`
+- `type TEXT NOT NULL` — examples: `course`, `build`, `skill`, `research`
+- `status TEXT NOT NULL` — examples: `active`, `paused`, `completed`, `archived`
+- `source TEXT` — examples: `hpacademy`, `udemy`, `manual`, `real-world-build`
+- `source_url TEXT`
+- `created_at TEXT NOT NULL`
+- `updated_at TEXT NOT NULL`
+- `metadata_json TEXT NOT NULL DEFAULT '{}'` — flexible project-specific data such as course provider, module count, build vehicle, engine family, or domain tags
+
+Examples:
+- **Engine Building Fundamentals** from HPAcademy
+- **Autodesk Fusion 360 (2026) – Complete Beginners Guide** from Udemy
+- **Rebuild my Spec Miata Engine** as a real-world build project
+- **Metallurgy Mastery** as a skill-focused project
+
+**`learning_goals`**
+
+Purpose: Stores specific, trackable objectives inside a project.
+
+Suggested fields:
+- `id TEXT PRIMARY KEY`
+- `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
+- `title TEXT NOT NULL`
+- `description TEXT`
+- `status TEXT NOT NULL` — examples: `not_started`, `in_progress`, `blocked`, `completed`
+- `priority INTEGER DEFAULT 0`
+- `confidence INTEGER` — optional self-assessed or AI-estimated confidence score
+- `created_at TEXT NOT NULL`
+- `updated_at TEXT NOT NULL`
+- `target_date TEXT`
+- `metadata_json TEXT NOT NULL DEFAULT '{}'`
+
+Example:
+- Project: **Rebuild my Spec Miata Engine**
+- Goal: “Understand piston clearance and proper measurement techniques”
+
+**`knowledge_gaps`**
+
+Purpose: Stores manually or automatically identified gaps tied to a project and optionally to a goal.
+
+Suggested fields:
+- `id TEXT PRIMARY KEY`
+- `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
+- `learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL`
+- `title TEXT NOT NULL`
+- `description TEXT`
+- `status TEXT NOT NULL` — examples: `open`, `in_progress`, `resolved`, `dismissed`
+- `severity INTEGER DEFAULT 0`
+- `detected_by TEXT NOT NULL` — examples: `user`, `ai`, `quiz`, `repeated-question`
+- `evidence_json TEXT NOT NULL DEFAULT '[]'` — references to messages, resources, quizzes, or repeated patterns
+- `created_at TEXT NOT NULL`
+- `updated_at TEXT NOT NULL`
+- `metadata_json TEXT NOT NULL DEFAULT '{}'`
+
+Example:
+- The learner repeatedly asks about torsional rigidity, stiffness, and load paths. The system creates a gap around structural mechanics and suggests resources or a new learning goal.
+
+**`resource_links`**
+
+Purpose: Connects a `CapturedResource` to a Project and optionally to a LearningGoal or KnowledgeGap.
+
+Suggested fields:
+- `id TEXT PRIMARY KEY`
+- `resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE`
+- `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
+- `learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL`
+- `knowledge_gap_id TEXT REFERENCES knowledge_gaps(id) ON DELETE SET NULL`
+- `link_type TEXT NOT NULL` — examples: `primary`, `supporting`, `evidence`, `practice`, `decision`
+- `note TEXT`
+- `created_at TEXT NOT NULL`
+- `metadata_json TEXT NOT NULL DEFAULT '{}'`
+
+Design notes:
+- A single resource can link to multiple projects.
+- A single resource can support multiple learning goals.
+- Resource links should eventually improve RAG retrieval by letting the AI mentor search within the active project first, then broaden to related projects or the full library.
+- This schema is intentionally compatible with future vector embeddings and chunk-level resource links.
+
+### Planned Implementation Phases
+
+**Phase 1 – Projects + Resource Linking**
+
+Create CRUD support for projects, allow captured resources to be linked to one or more projects, and make the right sidebar show project associations. RAG should prefer resources linked to the active project when one is selected.
+
+**Phase 2 – Learning Goals + Progress Tracking**
+
+Add learning goals inside projects, track goal status and confidence, and connect resources or AI explanations to specific objectives. Course projects should support module or lesson progress tracking.
+
+**Phase 3 – Knowledge Gap Detection + Recommendations**
+
+Identify repeated questions, low-confidence areas, missing prerequisites, or quiz failures as KnowledgeGaps. Use those gaps to recommend captured resources, new resources, practice exercises, visualizations, or new learning goals.
+
 ## Testing Status
 
 Vitest and Testing Library are configured as the standard test stack.
@@ -77,6 +186,9 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 ## Next Priorities
 
+- Projects + Resource Linking (Phase 1).
+- Learning Goals + Progress Tracking (Phase 2).
+- Knowledge Gap Detection + Recommendations (Phase 3).
 - Add article, textbook, broader file-upload, and persisted note capture flows using the `CapturedResource` model.
 - Persist notes and mentor sessions in the local-first database.
 - Add vector embeddings and chunk-level semantic retrieval alongside FTS5.
