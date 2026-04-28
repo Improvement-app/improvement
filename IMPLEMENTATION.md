@@ -1,6 +1,6 @@
 # Improvement Implementation
 
-Last updated: April 27, 2026
+Last updated: April 28, 2026
 
 ## Current Status
 
@@ -32,6 +32,8 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - Phase 2 goal UI in the center Learning Workspace: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
 - Learning Workspace streamlined in primary center panel (transcript notices, goals, resources, mentor chat) with project context driven by left sidebar selection.
 - Multi-tab browser moved to the right panel while retaining tabs, address bar, navigation, transcript capture, PDF import on New Tab, and the Electron `WebContentsView` bounds flow.
+- April 28 layout fix: the shell now uses explicit `react-resizable-panels` ordering of left sidebar, center Learning Workspace, and right Browser panel. The complete browser implementation renders only in the right panel, and the `browserFrameRef` / `ResizeObserver` / `setBrowserBounds` flow is attached to the right-panel browser frame so the active `WebContentsView` fills and resizes with that container.
+- Empty selected projects now show captured resources as link candidates until project resources exist, preserving the project/goal resource-linking workflow after project creation.
 - Transcript captures and PDF imports can be linked to the active project and active goal so newly captured learning material lands in the right context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
@@ -191,6 +193,7 @@ Current test coverage includes:
 - SQLite learning goal repository CRUD, completion handling, and project progress calculation.
 - Renderer learning goal creation, editing, deletion, status changes, progress display, and goal-aware resource linking controls.
 - Renderer layout coverage for the left project tree, Schedule mode, and time-block assignments.
+- Renderer layout coverage now asserts the sidebar, Learning Workspace, and Browser DOM order so the native `WebContentsView` bounds target remains the right panel.
 - PDF filename cleanup and PDF resource browser-opening behavior.
 - Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.

@@ -256,6 +256,25 @@ describe('App', () => {
     expect(api.createTab).toHaveBeenCalledWith()
   })
 
+  it('keeps the browser panel to the right of the learning workspace', async () => {
+    installImprovementMock()
+
+    render(<App />)
+    await screen.findByText(/Using grok-4/)
+
+    const panelOrder = Array.from(
+      document.querySelectorAll('.workspace .sidebar, .workspace .learning-center, .workspace .browser-column')
+    ).map((element) => {
+      if (element.classList.contains('sidebar')) {
+        return 'sidebar'
+      }
+
+      return element.classList.contains('learning-center') ? 'learning' : 'browser'
+    })
+
+    expect(panelOrder).toEqual(['sidebar', 'learning', 'browser'])
+  })
+
   it('routes captured webpage text to the Grok mentor panel', async () => {
     const { api, emitSelectionCaptured } = installImprovementMock()
 
@@ -489,13 +508,11 @@ describe('App', () => {
     await user.selectOptions(screen.getByDisplayValue('General'), 'build')
     await user.click(screen.getByRole('button', { name: 'Create Project' }))
 
-    // Use link select (visible when no project selected) and tree click for current project (replaces removed 'Current project' selector from UI cleanup)
-    await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Spec Miata Build')
+    await user.click(await screen.findByRole('button', { name: 'Link to Project' }))
 
     expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', undefined)
     expect(await screen.findByText('Linked to Spec Miata Build')).toBeInTheDocument()
 
-    await user.click(screen.getByText('Spec Miata Build'))
     expect(await screen.findByText('1 linked')).toBeInTheDocument()
   })
 
@@ -532,10 +549,7 @@ describe('App', () => {
 
     await user.selectOptions(screen.getByLabelText('Change status for Understand bearing clearance'), 'done')
 
-    // Use link select and tree click for current project selection (updated for 3-panel/tree UI)
-    await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Engine Course')
-    await user.click(screen.getByText('Engine Course'))
-    await user.selectOptions(screen.getByLabelText('Link selected resource to goal'), 'Understand bearing clearance')
+    await user.click(await screen.findByRole('button', { name: 'Link to Project' }))
 
     expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', 'goal-1')
     expect(await screen.findByText('Linked to Engine Course / Understand bearing clearance')).toBeInTheDocument()

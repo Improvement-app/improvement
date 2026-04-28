@@ -1,5 +1,6 @@
 import type { FormEvent, ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels'
 import type {
   BrowserTab,
   CapturedSelection,
@@ -321,7 +322,8 @@ export default function App(): ReactElement {
     () => learningGoals.find((goal) => goal.id === selectedGoalId) ?? null,
     [learningGoals, selectedGoalId]
   )
-  const displayedResources = selectedProject ? projectResources : capturedResources
+  const isShowingProjectResources = Boolean(selectedProject && projectResources.length > 0)
+  const displayedResources = isShowingProjectResources ? projectResources : capturedResources
   const selectedResource = useMemo(
     () => displayedResources.find((resource) => resource.id === selectedResourceId) ?? displayedResources[0] ?? null,
     [displayedResources, selectedResourceId]
@@ -864,10 +866,96 @@ export default function App(): ReactElement {
     }
   }
 
+  const browserPanel = (
+    <section className="browser-column" aria-label="Browser content region">
+      <section className="tab-strip" aria-label="Browser tabs">
+        {snapshot.tabs.map((tab) => (
+          <button
+            className={tab.id === snapshot.activeTabId ? 'tab active' : 'tab'}
+            type="button"
+            key={tab.id}
+            onClick={() => window.improvement.switchTab(tab.id)}
+            title={tab.title}
+          >
+            <span className={tab.isLoading ? 'tab-dot loading' : 'tab-dot'} />
+            <span className="tab-title">{tab.title || formatHostname(tab.url)}</span>
+            <span
+              role="button"
+              tabIndex={0}
+              className="tab-close"
+              aria-label={`Close ${tab.title || 'tab'}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                closeTab(tab.id)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  closeTab(tab.id)
+                }
+              }}
+            >
+              x
+            </span>
+          </button>
+        ))}
+        <button type="button" className="new-tab" onClick={createTab} aria-label="Open new tab">
+          +
+        </button>
+      </section>
+
+      <div className="browser-toolbar">
+        <div className="nav-buttons" aria-label="Browser navigation">
+          <button type="button" onClick={() => window.improvement.goBack()} disabled={!activeTab?.canGoBack}>
+            Back
+          </button>
+          <button type="button" onClick={() => window.improvement.goForward()} disabled={!activeTab?.canGoForward}>
+            Forward
+          </button>
+          <button type="button" onClick={() => window.improvement.reload()} disabled={!activeTab}>
+            Reload
+          </button>
+        </div>
+
+        <form className="address-form" onSubmit={submitNavigation}>
+          <input
+            aria-label="URL or search"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder="Enter a URL or search topic"
+          />
+          <button type="submit">Go</button>
+        </form>
+        {canCaptureTranscript && (
+          <button type="button" className="capture-transcript-button" onClick={() => void captureTranscript()} disabled={isCapturingTranscript}>
+            {isCapturingTranscript ? 'Capturing...' : 'Capture Transcript'}
+          </button>
+        )}
+      </div>
+      <div ref={browserFrameRef} className="browser-frame">
+        {!activeTab && <div className="browser-empty">Creating your first browser tab...</div>}
+      </div>
+    </section>
+  )
+
   return (
     <main className="app-shell">
-      <section className="workspace">
-        <aside className="sidebar left project-sidebar">
+      <PanelGroup
+        className="workspace"
+        orientation="horizontal"
+        id="improvement-workspace"
+        disabled={import.meta.env.MODE === 'test'}
+      >
+        <Panel
+          id="left-sidebar-panel"
+          className="workspace-panel"
+          defaultSize={22}
+          minSize="260px"
+          maxSize="420px"
+          groupResizeBehavior="preserve-pixel-size"
+        >
+          <aside className="sidebar left project-sidebar">
           <div className="panel-content navigation-panel">
             <div className="left-mode-switch" aria-label="Left sidebar mode">
               <button type="button" className={leftMode === 'projects' ? 'active' : ''} onClick={() => setLeftMode('projects')}>
@@ -1007,80 +1095,13 @@ export default function App(): ReactElement {
               </section>
             )}
           </div>
-        </aside>
+          </aside>
+        </Panel>
 
-        <section className="browser-column" aria-label="Browser content region">
-          <section className="tab-strip" aria-label="Browser tabs">
-            {snapshot.tabs.map((tab) => (
-              <button
-                className={tab.id === snapshot.activeTabId ? 'tab active' : 'tab'}
-                type="button"
-                key={tab.id}
-                onClick={() => window.improvement.switchTab(tab.id)}
-                title={tab.title}
-              >
-                <span className={tab.isLoading ? 'tab-dot loading' : 'tab-dot'} />
-                <span className="tab-title">{tab.title || formatHostname(tab.url)}</span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="tab-close"
-                  aria-label={`Close ${tab.title || 'tab'}`}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    closeTab(tab.id)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      closeTab(tab.id)
-                    }
-                  }}
-                >
-                  x
-                </span>
-              </button>
-            ))}
-            <button type="button" className="new-tab" onClick={createTab} aria-label="Open new tab">
-              +
-            </button>
-          </section>
+        <PanelResizeHandle className="panel-resize-handle" aria-label="Resize left sidebar" />
 
-          <div className="browser-toolbar">
-            <div className="nav-buttons" aria-label="Browser navigation">
-              <button type="button" onClick={() => window.improvement.goBack()} disabled={!activeTab?.canGoBack}>
-                Back
-              </button>
-              <button type="button" onClick={() => window.improvement.goForward()} disabled={!activeTab?.canGoForward}>
-                Forward
-              </button>
-              <button type="button" onClick={() => window.improvement.reload()} disabled={!activeTab}>
-                Reload
-              </button>
-            </div>
-
-            <form className="address-form" onSubmit={submitNavigation}>
-              <input
-                aria-label="URL or search"
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                placeholder="Enter a URL or search topic"
-              />
-              <button type="submit">Go</button>
-            </form>
-            {canCaptureTranscript && (
-              <button type="button" className="capture-transcript-button" onClick={() => void captureTranscript()} disabled={isCapturingTranscript}>
-                {isCapturingTranscript ? 'Capturing...' : 'Capture Transcript'}
-              </button>
-            )}
-          </div>
-          <div ref={browserFrameRef} className="browser-frame">
-            {!activeTab && <div className="browser-empty">Creating your first browser tab...</div>}
-          </div>
-        </section>
-
-        <section className="learning-center" aria-label="Learning Workspace">
+        <Panel id="learning-workspace-panel" className="workspace-panel" defaultSize={38} minSize="420px">
+          <section className="learning-center" aria-label="Learning Workspace">
           <div className="panel-content learning-workspace">
               {transcriptNotice && (
                 <section className={transcriptNotice.type === 'captured' ? 'transcript-card success' : 'transcript-card warning'}>
@@ -1196,9 +1217,9 @@ export default function App(): ReactElement {
                 <section className="captured-transcripts-card resource-library-card">
                   <div className="card-header">
                     <div>
-                      <h3>{selectedProject ? 'Project resources' : 'Captured resources'}</h3>
+                      <h3>{isShowingProjectResources ? 'Project resources' : 'Captured resources'}</h3>
                       <span>
-                        {displayedResources.length} {selectedProject ? 'linked' : 'saved locally'}
+                        {displayedResources.length} {isShowingProjectResources ? 'linked' : 'saved locally'}
                       </span>
                     </div>
                   </div>
@@ -1325,7 +1346,7 @@ export default function App(): ReactElement {
                           </button>
                         </div>
                       </div>
-                      {selectedProject && (
+                      {selectedProject && isSelectedResourceLinkedToProject && (
                         <button
                           type="button"
                           className="unlink-project-resource"
@@ -1505,8 +1526,15 @@ export default function App(): ReactElement {
                 <p>Use this space for geometry sketches, process flows, force diagrams, and AI-generated explanations tied to your notes.</p>
               </div>
           </div>
-        </section>
-      </section>
+          </section>
+        </Panel>
+
+        <PanelResizeHandle className="panel-resize-handle" aria-label="Resize browser panel" />
+
+        <Panel id="browser-workspace-panel" className="workspace-panel" defaultSize={40} minSize="390px">
+          {browserPanel}
+        </Panel>
+      </PanelGroup>
     </main>
   )
 }

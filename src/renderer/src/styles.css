@@ -120,11 +120,52 @@ button:disabled {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: 320px minmax(480px, 1fr) minmax(390px, 42vw);
+  width: 100%;
+  height: 100%;
   min-height: 0;
-  gap: 14px;
   padding: 14px;
+}
+
+.workspace-panel {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.workspace-panel > .sidebar,
+.workspace-panel > .learning-center,
+.workspace-panel > .browser-column {
+  width: 100%;
+  height: 100%;
+}
+
+.panel-resize-handle {
+  position: relative;
+  display: grid;
+  flex: 0 0 14px;
+  min-height: 0;
+  place-items: center;
+  outline: none;
+}
+
+.panel-resize-handle::before {
+  width: 2px;
+  height: 48px;
+  border-radius: 999px;
+  background: #c8d2e0;
+  content: "";
+  transition:
+    background 160ms ease,
+    height 160ms ease,
+    width 160ms ease;
+}
+
+.panel-resize-handle:hover::before,
+.panel-resize-handle:focus-visible::before,
+.panel-resize-handle[data-resize-handle-active]::before {
+  width: 3px;
+  height: 72px;
+  background: #2563eb;
 }
 
 .sidebar,
@@ -149,8 +190,6 @@ button:disabled {
 }
 
 .learning-center {
-  grid-column: 2;
-  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   border-radius: 18px;
@@ -896,8 +935,6 @@ h3 {
 }
 
 .browser-column {
-  grid-column: 3;
-  grid-row: 1;
   display: grid;
   grid-template-rows: 43px 52px minmax(0, 1fr);
   overflow: hidden;
@@ -1040,6 +1077,8 @@ h3 {
 
 .browser-frame {
   position: relative;
+  width: 100%;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   background: white;
