@@ -6,7 +6,7 @@ Last updated: April 27, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the right-side browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube and HPAcademy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube, HPAcademy, and Uy, and Udemy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -20,7 +20,9 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - Webpage text selection capture with floating "Send to AI" button.
 - Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages, using a normal desktop Chrome user agent for embedded tabs, broadened transcript-panel selectors, a short wait for YouTube's dynamic rendering, and a visible-text fallback for timestamped transcript lines.
 - Manual HPAcademy transcript capture via the same browser toolbar button on HPAcademy video-like pages, reading from the visible transcript window.
-- Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube and HPAcademy extractors, and a registry/factory for selecting the right extractor by URL.
+- Manual Udemy transcript capture via the same browser toolbar button on Udemy course/lecture pages (udemy.com, members.udemy.com), using the modular registry, visible transcript panel selectors (data-purpose="transcript-panel", .transcript-panel, etc.), and fallback message if panel not open.
+- Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube, HPAcademy, and Udemy extractors (in subfolders)script panel selectors (data-purpose="transcript-panel", .transcript-panel, etc.), and fallback message if panel not open.
+- Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube, HPAcademy, and Udemy extractors (in subfolders), and a registry/factory for selecting the right extractor by URL.
 - Unified `CapturedResource` model for transcripts, PDFs, articles, textbooks, notes, and future resource types.
 - SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
 - SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
@@ -45,8 +47,8 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - Styled Visualizer placeholder for future diagrams and generated learning aids.
 - Vitest + Testing Library setup for renderer workflow tests.
 - Tests covering tab interactions, "Send to AI" capture routing, note saving, learning-cell prompt starters, and formatted/copyable mentor responses.
-- Tests covering tab persistence serialization, file read/write, active-tab restoration data, and corrupted/missing state handling.
-- Tests covering YouTube and HPAcademy extractor URL detection, transcript registry selection, manual transcript extraction script generation, transcript capture UI, one-click Grok sending, and unavailable transcript messaging.
+- Tests covering tab per, HPAcademy, and Uerialization, file read/write, active-tab restoration data, and corrupted/missing state handling.
+- Tests covering YouTube, HPAcademy, and Udemy extractor URL detection, transcript registry selection, manual transcript extraction script generation, transcript capture UI, one-click Grok sending, and unavailable transcript messaging.
 - Electron dev launcher that removes `ELECTRON_RUN_AS_NODE` before running `electron-vite`.
 
 ## Current Limitations

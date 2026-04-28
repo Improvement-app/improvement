@@ -128,7 +128,7 @@ Examples:
 
 ### How It Works in Practice
 
-**Course-based projects** organize structured learning material from platforms such as HPAcademy, Udemy, or similar providers. The learner creates or imports a project for a course, captures transcripts and PDFs, tracks module progress, asks questions in context, and uses the mentor to generate summaries, quizzes, visual explanations, and follow-up practice prompts. The app can eventually show progress by module, resource, lesson, goal, and confidence.
+**Course-based projects** organize structured learning material from platforms such as HPAcademy, Udemy, or similar providers. The learner creates or imports a project for a course, captures transcripts (YouTube, HPAcademy, Udemy) (YouTube, HPAcademy, Udemy) and PDFs, tracks module progress, asks questions in context, and uses the mentor to generate summaries, quizzes, visual explanations, and follow-up practice prompts. The app can eventually show progress by module, resource, lesson, goal, and confidence.
 
 **Real-world build projects** organize practical work where the learner is trying to produce a real outcome. A project such as **Rebuild my Spec Miata Engine** can contain captured resources, measurements, calculations, torque specs, vendor notes, Q&A, decisions, risks, and open questions. The AI mentor can help explain tradeoffs, track decisions, surface missing prerequisites, and connect theoretical resources to practical build steps.
 

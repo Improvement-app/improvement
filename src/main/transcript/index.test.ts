@@ -10,6 +10,11 @@ describe('transcript registry', () => {
     expect(getTranscriptExtractor('https://members.hpacademy.com/courses/efi-tuning/lessons/fuel-tables')?.id).toBe('hpacademy')
   })
 
+  it('returns the Udemy extractor for Udemy course and lecture pages', () => {
+    expect(getTranscriptExtractor('https://www.udemy.com/course/javascript/learn/lecture/123456')?.id).toBe('udemy')
+    expect(getTranscriptExtractor('https://members.udemy.com/course/advanced-react/')?.id).toBe('udemy')
+  })
+
   it('reports unsupported pages', () => {
     expect(getTranscriptExtractor('https://example.com/watch?v=abc123')).toBeNull()
     expect(isSupportedTranscriptUrl('https://example.com/watch?v=abc123')).toBe(false)

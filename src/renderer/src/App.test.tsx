@@ -489,13 +489,13 @@ describe('App', () => {
     await user.selectOptions(screen.getByDisplayValue('General'), 'build')
     await user.click(screen.getByRole('button', { name: 'Create Project' }))
 
-    await user.selectOptions(await screen.findByLabelText('Current project'), 'All Resources')
+    // Use link select (visible when no project selected) and tree click for current project (replaces removed 'Current project' selector from UI cleanup)
     await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Spec Miata Build')
 
     expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', undefined)
     expect(await screen.findByText('Linked to Spec Miata Build')).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('Current project'), 'Spec Miata Build')
+    await user.click(screen.getByText('Spec Miata Build'))
     expect(await screen.findByText('1 linked')).toBeInTheDocument()
   })
 
@@ -532,9 +532,9 @@ describe('App', () => {
 
     await user.selectOptions(screen.getByLabelText('Change status for Understand bearing clearance'), 'done')
 
-    await user.selectOptions(screen.getByLabelText('Current project'), 'All Resources')
+    // Use link select and tree click for current project selection (updated for 3-panel/tree UI)
     await user.selectOptions(await screen.findByLabelText('Link selected resource to project'), 'Engine Course')
-    await user.selectOptions(screen.getByLabelText('Current project'), 'Engine Course')
+    await user.click(screen.getByText('Engine Course'))
     await user.selectOptions(screen.getByLabelText('Link selected resource to goal'), 'Understand bearing clearance')
 
     expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', 'goal-1')

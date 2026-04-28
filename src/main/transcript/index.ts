@@ -1,8 +1,13 @@
 import { HPAcademyTranscriptExtractor } from './hpacademy/HPAcademyTranscriptExtractor'
 import type { TranscriptExtractor } from './base/TranscriptExtractor'
 import { YouTubeTranscriptExtractor } from './youtube/YouTubeTranscriptExtractor'
+import { UdemyTranscriptExtractor } from './udemy/UdemyTranscriptExtractor'
 
-const transcriptExtractors: TranscriptExtractor[] = [new YouTubeTranscriptExtractor(), new HPAcademyTranscriptExtractor()]
+const transcriptExtractors: TranscriptExtractor[] = [
+  new YouTubeTranscriptExtractor(),
+  new HPAcademyTranscriptExtractor(),
+  new UdemyTranscriptExtractor()
+]
 
 export function getTranscriptExtractor(url: string): TranscriptExtractor | null {
   return transcriptExtractors.find((extractor) => extractor.canHandle(url)) ?? null
