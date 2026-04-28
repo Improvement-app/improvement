@@ -976,7 +976,7 @@ export default function App(): ReactElement {
         <Panel
           id="left-sidebar-panel"
           className="workspace-panel"
-          defaultSize={22}
+          defaultSize={21}
           minSize="260px"
           maxSize="420px"
           groupResizeBehavior="preserve-pixel-size"
@@ -1126,7 +1126,7 @@ export default function App(): ReactElement {
 
         <PanelResizeHandle className="panel-resize-handle" aria-label="Resize left sidebar" />
 
-        <Panel id="learning-workspace-panel" className="workspace-panel" defaultSize={38} minSize="420px">
+        <Panel id="learning-workspace-panel" className="workspace-panel" defaultSize={37} minSize="420px">
           <section className="learning-center" aria-label="Learning Workspace">
           <div className="panel-content learning-workspace">
               {transcriptNotice && (
@@ -1557,7 +1557,7 @@ export default function App(): ReactElement {
 
         <PanelResizeHandle className="panel-resize-handle" aria-label="Resize browser panel" />
 
-        <Panel id="browser-workspace-panel" className="workspace-panel" defaultSize={40} minSize="390px">
+        <Panel id="browser-workspace-panel" className="workspace-panel" defaultSize={37} minSize="390px">
           {browserPanel}
         </Panel>
       </PanelGroup>
