@@ -34,7 +34,6 @@ type LearningGoalRepositoryInstance = import('./projects/LearningGoalRepository'
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
 const XAI_MODEL = process.env.XAI_MODEL || 'grok-4'
-const BROWSER_VIEW_HORIZONTAL_INSET = 2
 const DESKTOP_CHROME_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 const MENTOR_SYSTEM_PROMPT = [
@@ -538,18 +537,15 @@ function applyActiveViewBounds(): void {
   }
 
   const contentBounds = mainWindow.getContentBounds()
-  const x = Math.max(0, Math.ceil(lastBrowserBounds.x) + BROWSER_VIEW_HORIZONTAL_INSET)
+  const x = Math.max(0, Math.round(lastBrowserBounds.x))
   const y = Math.max(0, Math.round(lastBrowserBounds.y))
-  const right = Math.min(
-    contentBounds.width,
-    Math.floor(lastBrowserBounds.x + lastBrowserBounds.width) - BROWSER_VIEW_HORIZONTAL_INSET
-  )
+  const width = Math.round(lastBrowserBounds.width)
   const height = Math.round(lastBrowserBounds.height)
 
   activeTab.view.setBounds({
     x,
     y,
-    width: Math.max(0, right - x),
+    width: Math.max(0, Math.min(width, contentBounds.width - x)),
     height: Math.max(0, Math.min(height, contentBounds.height - y))
   })
 }
