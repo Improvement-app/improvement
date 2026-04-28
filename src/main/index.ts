@@ -536,11 +536,14 @@ function applyActiveViewBounds(): void {
     return
   }
 
+  const x = Math.floor(lastBrowserBounds.x)
+  const y = Math.floor(lastBrowserBounds.y)
+
   activeTab.view.setBounds({
-    x: Math.round(lastBrowserBounds.x),
-    y: Math.round(lastBrowserBounds.y),
-    width: Math.max(0, Math.round(lastBrowserBounds.width)),
-    height: Math.max(0, Math.round(lastBrowserBounds.height))
+    x,
+    y,
+    width: Math.max(0, Math.ceil(lastBrowserBounds.x + lastBrowserBounds.width) - x),
+    height: Math.max(0, Math.ceil(lastBrowserBounds.y + lastBrowserBounds.height) - y)
   })
 }
 

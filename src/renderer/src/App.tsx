@@ -272,6 +272,7 @@ function FormattedMentorContent({ content }: { content: string }): ReactElement 
 
 export default function App(): ReactElement {
   const browserFrameRef = useRef<HTMLDivElement | null>(null)
+  const scheduleBrowserBoundsUpdateRef = useRef<() => void>(() => undefined)
   const [snapshot, setSnapshot] = useState<TabsSnapshot>(initialSnapshot)
   const [address, setAddress] = useState('')
   const [leftMode, setLeftMode] = useState<LeftSidebarMode>('projects')
@@ -493,6 +494,8 @@ export default function App(): ReactElement {
       return
     }
 
+    let animationFrameId: number | null = null
+
     const updateBounds = (): void => {
       const rect = frame.getBoundingClientRect()
       window.improvement.setBrowserBounds({
@@ -503,17 +506,39 @@ export default function App(): ReactElement {
       })
     }
 
-    updateBounds()
+    const scheduleUpdateBounds = (): void => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId)
+      }
 
-    const observer = new ResizeObserver(updateBounds)
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null
+        updateBounds()
+      })
+    }
+
+    scheduleBrowserBoundsUpdateRef.current = scheduleUpdateBounds
+    scheduleUpdateBounds()
+
+    const observer = new ResizeObserver(scheduleUpdateBounds)
     observer.observe(frame)
-    window.addEventListener('resize', updateBounds)
+    window.addEventListener('resize', scheduleUpdateBounds)
+    window.visualViewport?.addEventListener('resize', scheduleUpdateBounds)
 
     return () => {
+      scheduleBrowserBoundsUpdateRef.current = () => undefined
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId)
+      }
       observer.disconnect()
-      window.removeEventListener('resize', updateBounds)
+      window.removeEventListener('resize', scheduleUpdateBounds)
+      window.visualViewport?.removeEventListener('resize', scheduleUpdateBounds)
     }
   }, [snapshot.activeTabId])
+
+  const scheduleBrowserBoundsUpdate = (): void => {
+    scheduleBrowserBoundsUpdateRef.current()
+  }
 
   const submitNavigation = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -946,6 +971,7 @@ export default function App(): ReactElement {
         orientation="horizontal"
         id="improvement-workspace"
         disabled={import.meta.env.MODE === 'test'}
+        onLayoutChange={scheduleBrowserBoundsUpdate}
       >
         <Panel
           id="left-sidebar-panel"
