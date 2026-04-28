@@ -958,8 +958,10 @@ export default function App(): ReactElement {
           </button>
         )}
       </div>
-      <div ref={browserFrameRef} className="browser-frame">
-        {!activeTab && <div className="browser-empty">Creating your first browser tab...</div>}
+      <div className="browser-frame">
+        <div ref={browserFrameRef} className="browser-surface">
+          {!activeTab && <div className="browser-empty">Creating your first browser tab...</div>}
+        </div>
       </div>
     </section>
   )
