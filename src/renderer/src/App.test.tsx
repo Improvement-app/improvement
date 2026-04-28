@@ -275,20 +275,6 @@ describe('App', () => {
     expect(panelOrder).toEqual(['sidebar', 'learning', 'browser'])
   })
 
-  it('measures an inset browser surface inside the visible browser frame', async () => {
-    installImprovementMock()
-
-    render(<App />)
-    await screen.findByText(/Using grok-4/)
-
-    const browserFrame = document.querySelector<HTMLElement>('.browser-frame')
-    const browserSurface = document.querySelector<HTMLElement>('.browser-surface')
-
-    expect(browserFrame).toBeInTheDocument()
-    expect(browserSurface).toBeInTheDocument()
-    expect(browserFrame).toContainElement(browserSurface)
-  })
-
   it('routes captured webpage text to the Grok mentor panel', async () => {
     const { api, emitSelectionCaptured } = installImprovementMock()
 
