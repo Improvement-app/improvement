@@ -525,6 +525,15 @@ async function saveCurrentTabs(): Promise<void> {
   await writePersistedTabState(app.getPath('userData'), state)
 }
 
+function getRendererCoordinateScale(): number {
+  if (!mainWindow) {
+    return 1
+  }
+
+  const zoomFactor = mainWindow.webContents.getZoomFactor()
+  return Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1
+}
+
 function applyActiveViewBounds(): void {
   if (!mainWindow || !activeTabId || !lastBrowserBounds) {
     return
@@ -536,11 +545,12 @@ function applyActiveViewBounds(): void {
     return
   }
 
+  const scale = getRendererCoordinateScale()
   const contentBounds = mainWindow.getContentBounds()
-  const x = Math.max(0, Math.round(lastBrowserBounds.x))
-  const y = Math.max(0, Math.round(lastBrowserBounds.y))
-  const width = Math.round(lastBrowserBounds.width)
-  const height = Math.round(lastBrowserBounds.height)
+  const x = Math.max(0, Math.round(lastBrowserBounds.x * scale))
+  const y = Math.max(0, Math.round(lastBrowserBounds.y * scale))
+  const width = Math.round(lastBrowserBounds.width * scale)
+  const height = Math.round(lastBrowserBounds.height * scale)
 
   activeTab.view.setBounds({
     x,
@@ -1010,6 +1020,10 @@ function createMainWindow(): void {
         console.warn('Unable to save tab state before window close:', error)
       })
     }
+  })
+
+  mainWindow.webContents.on('zoom-changed', () => {
+    setTimeout(applyActiveViewBounds, 0)
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
