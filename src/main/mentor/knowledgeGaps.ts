@@ -41,6 +41,7 @@ const STOP_TERMS = new Set([
 export function analyzeProjectKnowledgeGaps(input: {
   project: Project
   resources: CapturedResource[]
+  availableResources?: CapturedResource[]
   sessionNotes?: string
   recentQuestions?: string[]
   now?: Date
@@ -49,6 +50,7 @@ export function analyzeProjectKnowledgeGaps(input: {
   const projectNotes = [input.project.notes, input.sessionNotes ?? ''].filter(Boolean).join('\n\n').trim()
   const projectText = [input.project.title, input.project.description, input.project.notes].filter(Boolean).join(' ')
   const resourceCorpus = buildResourceCorpus(input.resources)
+  const availableResources = excludeLinkedResources(input.availableResources ?? [], input.resources)
   const coveredTopics = extractTerms(resourceCorpus.topicText, 8)
   const gaps: KnowledgeGapRecommendation[] = []
 
@@ -99,6 +101,7 @@ export function analyzeProjectKnowledgeGaps(input: {
     project: input.project,
     recentQuestions: input.recentQuestions ?? [],
     resourceCorpus,
+    availableResources,
     addGap
   })
 
@@ -181,22 +184,35 @@ export function analyzeProjectKnowledgeGaps(input: {
     .slice(0, 3)
 
   for (const term of missingProjectTerms) {
+    const recommendation = recommendAvailableResource(term, availableResources)
     addGap({
       id: stableGapId(input.project.id, `cover-${term}`),
       title: `Cover ${formatTerm(term)}`,
       description: `The project brief mentions ${formatTerm(term)}, but linked resources do not appear to cover it yet.`,
-      recommendation: `Find or capture one source that directly explains ${formatTerm(term)} and link it to this project.`,
+      recommendation: recommendation
+        ? `Attach "${recommendation.title}" to this project, then ask Grok to explain how it covers ${formatTerm(term)}.`
+        : `Find or capture one source that directly explains ${formatTerm(term)} and link it to this project.`,
       severity: 2,
-      evidence: [
+      evidence: compactEvidence([
         {
           type: 'project',
           id: input.project.id,
           title: input.project.title,
           detail: `Project text includes "${formatTerm(term)}".`
-        }
-      ],
+        },
+        recommendation
+          ? {
+              type: 'resource',
+              id: recommendation.id,
+              title: recommendation.title,
+              detail: `Existing unlinked ${recommendation.type} resource appears to cover "${formatTerm(term)}".`
+            }
+          : null
+      ]),
       metadata: {
-        term
+        term,
+        recommendedResourceId: recommendation?.id ?? null,
+        recommendedResourceTitle: recommendation?.title ?? null
       }
     })
   }
@@ -207,21 +223,34 @@ export function analyzeProjectKnowledgeGaps(input: {
     .slice(0, 2)
 
   for (const term of uncoveredNoteTerms) {
+    const recommendation = recommendAvailableResource(term, availableResources)
     addGap({
       id: stableGapId(input.project.id, `source-note-${term}`),
       title: `Source the note on ${formatTerm(term)}`,
       description: `Your notes mention ${formatTerm(term)}, but no linked source currently backs it up.`,
-      recommendation: `Attach a resource that validates, expands, or challenges the note about ${formatTerm(term)}.`,
+      recommendation: recommendation
+        ? `Attach "${recommendation.title}" as supporting evidence for the note about ${formatTerm(term)}.`
+        : `Attach a resource that validates, expands, or challenges the note about ${formatTerm(term)}.`,
       severity: 1,
-      evidence: [
+      evidence: compactEvidence([
         {
           type: 'notes',
           title: 'Project notes',
           detail: `Notes include "${formatTerm(term)}".`
-        }
-      ],
+        },
+        recommendation
+          ? {
+              type: 'resource',
+              id: recommendation.id,
+              title: recommendation.title,
+              detail: `Existing unlinked ${recommendation.type} resource appears to cover "${formatTerm(term)}".`
+            }
+          : null
+      ]),
       metadata: {
-        term
+        term,
+        recommendedResourceId: recommendation?.id ?? null,
+        recommendedResourceTitle: recommendation?.title ?? null
       }
     })
   }
@@ -241,6 +270,7 @@ function addRepeatedQuestionGaps(input: {
   project: Project
   recentQuestions: string[]
   resourceCorpus: { searchText: string; topicText: string }
+  availableResources: CapturedResource[]
   addGap: (
     gap: Pick<
       KnowledgeGapRecommendation,
@@ -273,27 +303,74 @@ function addRepeatedQuestionGaps(input: {
 
   for (const [term, value] of repeatedTerms) {
     const isCovered = input.resourceCorpus.searchText.includes(term)
+    const recommendation = isCovered ? null : recommendAvailableResource(term, input.availableResources)
     input.addGap({
       id: stableGapId(input.project.id, `repeated-question-${term}`),
       title: `Repeated question about ${formatTerm(term)}`,
       description: `You have asked about ${formatTerm(term)} multiple times in this project, which suggests it needs a clearer explanation, practice, or source coverage.`,
       recommendation: isCovered
         ? `Ask Grok to synthesize the linked resources into a short explanation and practice check for ${formatTerm(term)}.`
-        : `Capture or link a focused source for ${formatTerm(term)}, then ask Grok to turn it into a short practice sequence.`,
+        : recommendation
+          ? `Attach "${recommendation.title}" to this project, then ask Grok to turn it into a short practice sequence for ${formatTerm(term)}.`
+          : `Capture or link a focused source for ${formatTerm(term)}, then ask Grok to turn it into a short practice sequence.`,
       severity: isCovered ? 1 : 2,
       detectedBy: 'repeated-question',
-      evidence: value.examples.slice(0, 3).map((question) => ({
-        type: 'mentor',
-        title: 'Recent mentor question',
-        detail: question
-      })),
+      evidence: compactEvidence([
+        ...value.examples.slice(0, 3).map((question) => ({
+          type: 'mentor' as const,
+          title: 'Recent mentor question',
+          detail: question
+        })),
+        recommendation
+          ? {
+              type: 'resource' as const,
+              id: recommendation.id,
+              title: recommendation.title,
+              detail: `Existing unlinked ${recommendation.type} resource appears to cover "${formatTerm(term)}".`
+            }
+          : null
+      ]),
       metadata: {
         term,
         questionCount: value.count,
-        coveredByLinkedResource: isCovered
+        coveredByLinkedResource: isCovered,
+        recommendedResourceId: recommendation?.id ?? null,
+        recommendedResourceTitle: recommendation?.title ?? null
       }
     })
   }
+}
+
+function excludeLinkedResources(availableResources: CapturedResource[], linkedResources: CapturedResource[]): CapturedResource[] {
+  const linkedIds = new Set(linkedResources.map((resource) => resource.id))
+  return availableResources.filter((resource) => !linkedIds.has(resource.id))
+}
+
+function recommendAvailableResource(term: string, availableResources: CapturedResource[]): CapturedResource | null {
+  const normalizedTerm = normalizeText(term).trim()
+
+  if (!normalizedTerm) {
+    return null
+  }
+
+  return availableResources.find((resource) => resourceSearchText(resource).includes(normalizedTerm)) ?? null
+}
+
+function resourceSearchText(resource: CapturedResource): string {
+  return normalizeText(
+    [
+      resource.title,
+      resource.summary ?? '',
+      resource.tags?.join(' ') ?? '',
+      resource.content.slice(0, 4000)
+    ].join(' ')
+  )
+}
+
+function compactEvidence(
+  evidence: Array<KnowledgeGapRecommendation['evidence'][number] | null>
+): KnowledgeGapRecommendation['evidence'] {
+  return evidence.filter((item): item is KnowledgeGapRecommendation['evidence'][number] => item !== null)
 }
 
 function buildResourceCorpus(resources: CapturedResource[]): { searchText: string; topicText: string } {

@@ -78,6 +78,46 @@ describe('analyzeProjectKnowledgeGaps', () => {
     )
   })
 
+  it('recommends an existing unlinked resource for uncovered project terms', () => {
+    const summary = analyzeProjectKnowledgeGaps({
+      project: project(),
+      resources: [
+        resource({
+          id: 'linked-roll-center',
+          title: 'Roll Center Notes',
+          content: 'Roll center migration affects lateral load transfer and chassis balance.'
+        })
+      ],
+      availableResources: [
+        resource({
+          id: 'unlinked-tire-resource',
+          title: 'Tire Grip Reference',
+          content: 'Tire grip changes with slip angle, load sensitivity, and temperature.'
+        })
+      ],
+      now
+    })
+
+    expect(summary.gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Cover tire',
+          recommendation: 'Attach "Tire Grip Reference" to this project, then ask Grok to explain how it covers tire.',
+          evidence: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'resource',
+              id: 'unlinked-tire-resource'
+            })
+          ]),
+          metadata: expect.objectContaining({
+            recommendedResourceId: 'unlinked-tire-resource',
+            recommendedResourceTitle: 'Tire Grip Reference'
+          })
+        })
+      ])
+    )
+  })
+
   it('recommends synthesis notes when resources exist but notes are sparse', () => {
     const summary = analyzeProjectKnowledgeGaps({
       project: project({ notes: '' }),
@@ -132,6 +172,40 @@ describe('analyzeProjectKnowledgeGaps', () => {
             term: 'torsional',
             questionCount: 2,
             coveredByLinkedResource: false
+          })
+        })
+      ])
+    )
+  })
+
+  it('recommends an existing unlinked resource for repeated questions', () => {
+    const summary = analyzeProjectKnowledgeGaps({
+      project: project({
+        description: 'Understand vehicle setup tradeoffs.',
+        notes: 'I have a working project note with enough context to avoid sparse-note gaps.'
+      }),
+      resources: [resource()],
+      availableResources: [
+        resource({
+          id: 'torsional-reference',
+          title: 'Torsional Rigidity Reference',
+          content: 'Torsional rigidity describes resistance to chassis twist under load.'
+        })
+      ],
+      recentQuestions: [
+        'How does torsional rigidity change chassis setup?',
+        'Can you explain torsional rigidity in practical terms?'
+      ],
+      now
+    })
+
+    expect(summary.gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Repeated question about torsional',
+          recommendation: 'Attach "Torsional Rigidity Reference" to this project, then ask Grok to turn it into a short practice sequence for torsional.',
+          metadata: expect.objectContaining({
+            recommendedResourceId: 'torsional-reference'
           })
         })
       ])

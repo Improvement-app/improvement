@@ -771,10 +771,12 @@ async function getProjectKnowledgeGapSummary(projectId: string, sessionNotes = '
   }
 
   const resources = await projectRepository.getResourcesForProject(project.id)
+  const availableResources = await resourceRepository?.getAll()
 
   const generatedSummary = analyzeProjectKnowledgeGaps({
     project,
     resources,
+    availableResources,
     sessionNotes,
     recentQuestions: getRecentProjectMentorQuestions(project.id)
   })
