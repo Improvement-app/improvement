@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { CapturedSelection, MentorStreamEvent, RendererApi, ResourceImportedEvent, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
-import type { ProjectKnowledgeGapSummary } from '../../shared/knowledgeGaps'
+import type { KnowledgeGapStatus, ProjectKnowledgeGapSummary } from '../../shared/knowledgeGaps'
 import type { Project, ProjectInput, ProjectResourceLink } from '../../shared/projects'
 import type { CapturedResource } from '../../shared/resources'
 
@@ -48,6 +48,7 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
   const resources: CapturedResource[] = [...initialResources]
   const projects: Project[] = []
   const links: ProjectResourceLink[] = []
+  const gapStatuses = new Map<string, KnowledgeGapStatus>()
 
   const knowledgeGapSummary = (projectId: string): ProjectKnowledgeGapSummary | null => {
     const project = projects.find((item) => item.id === projectId)
@@ -68,29 +69,36 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       coveredTopics: linkedResources.map((resource) => resource.title),
       gaps:
         linkedResources.length === 0
-          ? [
-              {
-                id: `${projectId}:link-first-source`,
-                projectId,
-                title: 'Link one strong source',
-                description: 'No captured resources are linked to this project yet.',
-                recommendation: 'Import a PDF, capture a transcript, or attach an existing resource before asking for a roadmap.',
-                status: 'open',
-                severity: 3,
-                detectedBy: 'heuristic',
-                evidence: [
-                  {
-                    type: 'project',
-                    id: projectId,
-                    title: project.title,
-                    detail: 'Project has zero linked resources.'
-                  }
-                ],
-                createdAt: '2026-05-04T12:00:00.000Z',
-                updatedAt: '2026-05-04T12:00:00.000Z',
-                metadata: { resourceCount: 0 }
-              }
-            ]
+          ? (() => {
+              const gapId = `${projectId}:link-first-source`
+              const status = gapStatuses.get(gapId) ?? 'open'
+
+              return status === 'open' || status === 'in_progress'
+                ? [
+                    {
+                      id: gapId,
+                      projectId,
+                      title: 'Link one strong source',
+                      description: 'No captured resources are linked to this project yet.',
+                      recommendation: 'Import a PDF, capture a transcript, or attach an existing resource before asking for a roadmap.',
+                      status,
+                      severity: 3,
+                      detectedBy: 'heuristic',
+                      evidence: [
+                        {
+                          type: 'project',
+                          id: projectId,
+                          title: project.title,
+                          detail: 'Project has zero linked resources.'
+                        }
+                      ],
+                      createdAt: '2026-05-04T12:00:00.000Z',
+                      updatedAt: '2026-05-04T12:00:00.000Z',
+                      metadata: { resourceCount: 0 }
+                    }
+                  ]
+                : []
+            })()
           : []
     }
   }
@@ -163,6 +171,11 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       Promise.resolve(resources.filter((resource) => links.some((link) => link.projectId === projectId && link.resourceId === resource.id)))
     ),
     getProjectKnowledgeGaps: vi.fn().mockImplementation((projectId: string) => Promise.resolve(knowledgeGapSummary(projectId))),
+    updateKnowledgeGapStatus: vi.fn().mockImplementation((gapId: string, status: KnowledgeGapStatus) => {
+      gapStatuses.set(gapId, status)
+      const [projectId] = gapId.split(':')
+      return Promise.resolve(knowledgeGapSummary(projectId))
+    }),
     importPdfResource: vi.fn().mockResolvedValue(null),
     openPdfResource: vi.fn().mockResolvedValue(tabsSnapshot),
     getXaiStatus: vi.fn().mockResolvedValue({
@@ -576,6 +589,14 @@ describe('App', () => {
     expect(await screen.findByText('Link one strong source')).toBeInTheDocument()
     expect(screen.getByText('Import a PDF, capture a transcript, or attach an existing resource before asking for a roadmap.')).toBeInTheDocument()
     expect(api.getProjectKnowledgeGaps).toHaveBeenCalledWith('project-1', '')
+
+    await user.click(screen.getByRole('button', { name: 'Work on this' }))
+    expect(api.updateKnowledgeGapStatus).toHaveBeenCalledWith('project-1:link-first-source', 'in_progress')
+    expect(await screen.findByText(/In progress · Severity 3/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(api.updateKnowledgeGapStatus).toHaveBeenCalledWith('project-1:link-first-source', 'dismissed')
+    await waitFor(() => expect(screen.queryByText('Link one strong source')).not.toBeInTheDocument())
   })
 
   it('syncs active project context and refreshes PDF imports from the browser New Tab page', async () => {

@@ -17,7 +17,7 @@ import type {
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import type { ProjectKnowledgeGapSummary } from '../shared/knowledgeGaps'
+import type { KnowledgeGapStatus, ProjectKnowledgeGapSummary } from '../shared/knowledgeGaps'
 import type { ProjectInput, ProjectUpdate } from '../shared/projects'
 import type { CapturedResource } from '../shared/resources'
 import {
@@ -765,11 +765,21 @@ async function getProjectKnowledgeGapSummary(projectId: string, sessionNotes = '
 
   const resources = await projectRepository.getResourcesForProject(project.id)
 
-  return analyzeProjectKnowledgeGaps({
+  const generatedSummary = analyzeProjectKnowledgeGaps({
     project,
     resources,
     sessionNotes
   })
+  const gaps = await projectRepository.syncKnowledgeGaps(project.id, generatedSummary.gaps)
+
+  return {
+    ...generatedSummary,
+    gaps
+  }
+}
+
+function isKnowledgeGapStatus(value: unknown): value is KnowledgeGapStatus {
+  return value === 'open' || value === 'in_progress' || value === 'resolved' || value === 'dismissed'
 }
 
 async function buildActiveProjectLearningContext(sessionNotes = ''): Promise<string | null> {
@@ -1161,6 +1171,15 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.getProjectKnowledgeGaps, async (_event, projectId: string, sessionNotes = '') =>
     getProjectKnowledgeGapSummary(projectId, typeof sessionNotes === 'string' ? sessionNotes : '')
   )
+  ipcMain.handle(ipcChannels.updateKnowledgeGapStatus, async (_event, gapId: string, status: KnowledgeGapStatus) => {
+    if (!isKnowledgeGapStatus(status)) {
+      throw new Error('Invalid knowledge gap status.')
+    }
+
+    const updated = await projectRepository?.updateKnowledgeGapStatus(gapId, status)
+
+    return updated ? getProjectKnowledgeGapSummary(updated.projectId) : null
+  })
   ipcMain.handle(ipcChannels.importPdfResource, () => importPdf())
   ipcMain.handle(ipcChannels.openPdfResource, (_event, id: string) => openPdfResource(id))
   ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {

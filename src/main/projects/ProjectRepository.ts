@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import type {
+  KnowledgeGapDetectedBy,
+  KnowledgeGapRecommendation,
+  KnowledgeGapSeverity,
+  KnowledgeGapStatus
+} from '../../shared/knowledgeGaps'
 import type { CapturedResource } from '../../shared/resources'
 import type { Project, ProjectInput, ProjectResourceLink, ProjectType, ProjectUpdate, ResourceLink } from '../../shared/projects'
 
@@ -45,6 +51,21 @@ interface ResourceRow {
   metadata_json: string
   tags_json: string | null
   summary: string | null
+}
+
+interface KnowledgeGapRow {
+  id: string
+  project_id: string
+  title: string
+  description: string | null
+  recommendation: string
+  status: KnowledgeGapStatus
+  severity: KnowledgeGapSeverity
+  detected_by: KnowledgeGapDetectedBy
+  evidence_json: string
+  created_at: string
+  updated_at: string
+  metadata_json: string
 }
 
 export class ProjectRepository {
@@ -226,6 +247,79 @@ export class ProjectRepository {
     return rows.map((row) => this.resourceFromRow(row))
   }
 
+  async syncKnowledgeGaps(projectId: string, gaps: KnowledgeGapRecommendation[]): Promise<KnowledgeGapRecommendation[]> {
+    const detectedIds = new Set(gaps.map((gap) => gap.id))
+
+    for (const gap of gaps) {
+      await this.upsertKnowledgeGap(gap)
+    }
+
+    const activeGaps = await this.getKnowledgeGapsForProject(projectId, ['open', 'in_progress'])
+
+    return activeGaps.filter((gap) => detectedIds.has(gap.id) || gap.status === 'in_progress')
+  }
+
+  async updateKnowledgeGapStatus(id: string, status: KnowledgeGapStatus): Promise<KnowledgeGapRecommendation | null> {
+    const existing = await this.getKnowledgeGapById(id)
+
+    if (!existing) {
+      return null
+    }
+
+    const next: KnowledgeGapRecommendation = {
+      ...existing,
+      status,
+      updatedAt: new Date().toISOString()
+    }
+
+    this.db
+      .prepare(
+        `UPDATE knowledge_gaps
+         SET status = @status,
+             updated_at = @updatedAt
+         WHERE id = @id`
+      )
+      .run({
+        id: next.id,
+        status: next.status,
+        updatedAt: next.updatedAt
+      })
+
+    return next
+  }
+
+  async getKnowledgeGapsForProject(
+    projectId: string,
+    statuses: KnowledgeGapStatus[] = ['open', 'in_progress', 'resolved', 'dismissed']
+  ): Promise<KnowledgeGapRecommendation[]> {
+    const uniqueStatuses = Array.from(new Set(statuses))
+    if (uniqueStatuses.length === 0) {
+      return []
+    }
+
+    const statusParams = Object.fromEntries(uniqueStatuses.map((status, index) => [`status${index}`, status]))
+    const statusPlaceholders = uniqueStatuses.map((_status, index) => `@status${index}`).join(', ')
+    const rows = this.db
+      .prepare(
+        `SELECT *
+         FROM knowledge_gaps
+         WHERE project_id = @projectId
+           AND status IN (${statusPlaceholders})
+         ORDER BY
+           CASE status
+             WHEN 'in_progress' THEN 0
+             WHEN 'open' THEN 1
+             WHEN 'resolved' THEN 2
+             ELSE 3
+           END,
+           severity DESC,
+           updated_at DESC`
+      )
+      .all({ projectId, ...statusParams }) as KnowledgeGapRow[]
+
+    return rows.map((row) => this.knowledgeGapFromRow(row))
+  }
+
   close(): void {
     this.db.close()
   }
@@ -257,7 +351,76 @@ export class ProjectRepository {
 
       CREATE INDEX IF NOT EXISTS idx_resource_links_resource ON resource_links(resource_id);
       CREATE INDEX IF NOT EXISTS idx_resource_links_project ON resource_links(project_id);
+
+      CREATE TABLE IF NOT EXISTS knowledge_gaps (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        recommendation TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('open', 'in_progress', 'resolved', 'dismissed')),
+        severity INTEGER NOT NULL DEFAULT 0,
+        detected_by TEXT NOT NULL,
+        evidence_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_knowledge_gaps_project ON knowledge_gaps(project_id);
+      CREATE INDEX IF NOT EXISTS idx_knowledge_gaps_status ON knowledge_gaps(status);
     `)
+  }
+
+  private async upsertKnowledgeGap(gap: KnowledgeGapRecommendation): Promise<KnowledgeGapRecommendation> {
+    const existing = await this.getKnowledgeGapById(gap.id)
+
+    if (existing) {
+      const next: KnowledgeGapRecommendation = {
+        ...gap,
+        status: existing.status,
+        createdAt: existing.createdAt,
+        updatedAt: new Date().toISOString()
+      }
+
+      this.db
+        .prepare(
+          `UPDATE knowledge_gaps
+           SET title = @title,
+               description = @description,
+               recommendation = @recommendation,
+               status = @status,
+               severity = @severity,
+               detected_by = @detectedBy,
+               evidence_json = @evidenceJson,
+               updated_at = @updatedAt,
+               metadata_json = @metadataJson
+           WHERE id = @id`
+        )
+        .run(this.knowledgeGapParams(next))
+
+      return next
+    }
+
+    this.db
+      .prepare(
+        `INSERT INTO knowledge_gaps (
+          id, project_id, title, description, recommendation, status, severity,
+          detected_by, evidence_json, created_at, updated_at, metadata_json
+        ) VALUES (
+          @id, @projectId, @title, @description, @recommendation, @status, @severity,
+          @detectedBy, @evidenceJson, @createdAt, @updatedAt, @metadataJson
+        )`
+      )
+      .run(this.knowledgeGapParams(gap))
+
+    return gap
+  }
+
+  private async getKnowledgeGapById(id: string): Promise<KnowledgeGapRecommendation | null> {
+    const row = this.db.prepare('SELECT * FROM knowledge_gaps WHERE id = ?').get(id) as KnowledgeGapRow | undefined
+    return row ? this.knowledgeGapFromRow(row) : null
   }
 
   private projectParams(project: Project): Record<string, unknown> {
@@ -281,6 +444,23 @@ export class ProjectRepository {
       linkedAt: link.linkedAt,
       notes: link.notes,
       relevanceScore: link.relevanceScore
+    }
+  }
+
+  private knowledgeGapParams(gap: KnowledgeGapRecommendation): Record<string, unknown> {
+    return {
+      id: gap.id,
+      projectId: gap.projectId,
+      title: gap.title,
+      description: gap.description,
+      recommendation: gap.recommendation,
+      status: gap.status,
+      severity: gap.severity,
+      detectedBy: gap.detectedBy,
+      evidenceJson: JSON.stringify(gap.evidence),
+      createdAt: gap.createdAt,
+      updatedAt: gap.updatedAt,
+      metadataJson: JSON.stringify(gap.metadata)
     }
   }
 
@@ -336,8 +516,38 @@ export class ProjectRepository {
       content: row.content,
       capturedAt: row.captured_at,
       metadata: this.parseJsonObject(row.metadata_json),
-      tags: row.tags_json ? this.parseJsonArray(row.tags_json) : undefined,
+      tags: row.tags_json ? this.parseJsonArray(row.tags_json).map(String) : undefined,
       summary: row.summary ?? undefined
+    }
+  }
+
+  private knowledgeGapFromRow(row: KnowledgeGapRow): KnowledgeGapRecommendation {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      description: row.description ?? '',
+      recommendation: row.recommendation,
+      status: row.status,
+      severity: row.severity,
+      detectedBy: row.detected_by,
+      evidence: this.parseJsonArray(row.evidence_json).map((item) =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? {
+              type: String((item as Record<string, unknown>).type ?? 'project') as KnowledgeGapRecommendation['evidence'][number]['type'],
+              id: typeof (item as Record<string, unknown>).id === 'string' ? String((item as Record<string, unknown>).id) : undefined,
+              title: String((item as Record<string, unknown>).title ?? 'Evidence'),
+              detail: String((item as Record<string, unknown>).detail ?? '')
+            }
+          : {
+              type: 'project',
+              title: 'Evidence',
+              detail: String(item ?? '')
+            }
+      ),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      metadata: this.parseJsonObject(row.metadata_json) as KnowledgeGapRecommendation['metadata']
     }
   }
 
@@ -350,10 +560,10 @@ export class ProjectRepository {
     }
   }
 
-  private parseJsonArray(value: string): string[] {
+  private parseJsonArray(value: string): unknown[] {
     try {
       const parsed = JSON.parse(value) as unknown
-      return Array.isArray(parsed) ? parsed.map(String) : []
+      return Array.isArray(parsed) ? parsed : []
     } catch {
       return []
     }

@@ -10,6 +10,7 @@ import type {
   TranscriptCaptureEvent
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
+import type { KnowledgeGapStatus } from '../shared/knowledgeGaps'
 import type { ProjectInput, ProjectUpdate } from '../shared/projects'
 
 const api: RendererApi = {
@@ -41,6 +42,8 @@ const api: RendererApi = {
   getProjectResources: (projectId: string) => ipcRenderer.invoke(ipcChannels.getProjectResources, projectId),
   getProjectKnowledgeGaps: (projectId: string, sessionNotes?: string) =>
     ipcRenderer.invoke(ipcChannels.getProjectKnowledgeGaps, projectId, sessionNotes),
+  updateKnowledgeGapStatus: (gapId: string, status: KnowledgeGapStatus) =>
+    ipcRenderer.invoke(ipcChannels.updateKnowledgeGapStatus, gapId, status),
   importPdfResource: () => ipcRenderer.invoke(ipcChannels.importPdfResource),
   openPdfResource: (id: string) => ipcRenderer.invoke(ipcChannels.openPdfResource, id),
   getXaiStatus: () => ipcRenderer.invoke(ipcChannels.getXaiStatus),

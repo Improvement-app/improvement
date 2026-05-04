@@ -1,5 +1,5 @@
 import type { CapturedResource } from './resources'
-import type { ProjectKnowledgeGapSummary } from './knowledgeGaps'
+import type { KnowledgeGapStatus, ProjectKnowledgeGapSummary } from './knowledgeGaps'
 import type { Project, ProjectInput, ProjectResourceLink, ProjectUpdate } from './projects'
 
 export type TabId = string
@@ -107,6 +107,7 @@ export interface RendererApi {
   getResourceProjectLinks: (resourceId: string) => Promise<ProjectResourceLink[]>
   getProjectResources: (projectId: string) => Promise<CapturedResource[]>
   getProjectKnowledgeGaps: (projectId: string, sessionNotes?: string) => Promise<ProjectKnowledgeGapSummary | null>
+  updateKnowledgeGapStatus: (gapId: string, status: KnowledgeGapStatus) => Promise<ProjectKnowledgeGapSummary | null>
   importPdfResource: () => Promise<CapturedResource | null>
   openPdfResource: (id: string) => Promise<TabsSnapshot>
   getXaiStatus: () => Promise<XaiStatus>
@@ -143,6 +144,7 @@ export const ipcChannels = {
   getResourceProjectLinks: 'projects:get-resource-links',
   getProjectResources: 'projects:get-resources',
   getProjectKnowledgeGaps: 'projects:get-knowledge-gaps',
+  updateKnowledgeGapStatus: 'projects:update-knowledge-gap-status',
   importPdfResource: 'resources:import-pdf',
   resourceImported: 'resources:imported',
   openPdfResource: 'resources:open-pdf',

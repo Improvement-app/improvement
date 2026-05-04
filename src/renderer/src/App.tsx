@@ -11,7 +11,7 @@ import type {
   TranscriptCaptureEvent,
   XaiStatus
 } from '../../shared/ipc'
-import type { KnowledgeGapRecommendation, ProjectKnowledgeGapSummary } from '../../shared/knowledgeGaps'
+import type { KnowledgeGapRecommendation, KnowledgeGapStatus, ProjectKnowledgeGapSummary } from '../../shared/knowledgeGaps'
 import type {
   Project,
   ProjectInput,
@@ -834,6 +834,18 @@ export default function App(): ReactElement {
     setFollowUp(`Help me close this knowledge gap: ${gap.title}. ${gap.recommendation}`)
   }
 
+  const changeKnowledgeGapStatus = async (gap: KnowledgeGapRecommendation, status: KnowledgeGapStatus): Promise<void> => {
+    setIsLoadingKnowledgeGaps(true)
+    try {
+      const nextSummary = await window.improvement.updateKnowledgeGapStatus(gap.id, status)
+      setKnowledgeGapSummary(nextSummary)
+    } catch {
+      setMentorError('Unable to update this knowledge gap.')
+    } finally {
+      setIsLoadingKnowledgeGaps(false)
+    }
+  }
+
   const browserPanel = (
     <section className="browser-column" aria-label="Browser content region">
       <section className="tab-strip" aria-label="Browser tabs">
@@ -1224,10 +1236,25 @@ export default function App(): ReactElement {
                         </div>
                         <p>{gap.recommendation}</p>
                         <div className="knowledge-gap-footer">
-                          <span>Severity {gap.severity}</span>
-                          <button type="button" onClick={() => askAboutKnowledgeGap(gap)}>
-                            Ask Grok
-                          </button>
+                          <span>
+                            {gap.status === 'in_progress' ? 'In progress' : 'Open'} · Severity {gap.severity}
+                          </span>
+                          <div className="knowledge-gap-actions">
+                            {gap.status === 'open' && (
+                              <button type="button" onClick={() => void changeKnowledgeGapStatus(gap, 'in_progress')}>
+                                Work on this
+                              </button>
+                            )}
+                            <button type="button" onClick={() => askAboutKnowledgeGap(gap)}>
+                              Ask Grok
+                            </button>
+                            <button type="button" onClick={() => void changeKnowledgeGapStatus(gap, 'resolved')}>
+                              Mark resolved
+                            </button>
+                            <button type="button" onClick={() => void changeKnowledgeGapStatus(gap, 'dismissed')}>
+                              Dismiss
+                            </button>
+                          </div>
                         </div>
                       </article>
                     ))}

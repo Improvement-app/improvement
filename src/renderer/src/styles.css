@@ -1168,9 +1168,17 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.knowledge-gap-footer button {
+.knowledge-gap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.knowledge-gap-actions button {
   flex: 0 0 auto;
   padding: 6px 9px;
   border: 1px solid #bfdbfe;
@@ -1182,7 +1190,7 @@ textarea {
   cursor: pointer;
 }
 
-.knowledge-gap-footer button:hover {
+.knowledge-gap-actions button:hover {
   background: #dbeafe;
 }
 

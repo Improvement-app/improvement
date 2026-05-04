@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { KnowledgeGapRecommendation } from '../../shared/knowledgeGaps'
 import { ResourceRepository } from '../resources/ResourceRepository'
 import { ProjectRepository } from './ProjectRepository'
 
@@ -34,6 +35,31 @@ describe('ProjectRepository', () => {
       metadata: {},
       tags: ['engine']
     })
+  }
+
+  function knowledgeGap(projectId: string, overrides: Partial<KnowledgeGapRecommendation> = {}): KnowledgeGapRecommendation {
+    return {
+      id: `${projectId}:link-first-source`,
+      projectId,
+      title: 'Link one strong source',
+      description: 'No captured resources are linked to this project yet.',
+      recommendation: 'Import a PDF or capture a transcript.',
+      status: 'open',
+      severity: 3,
+      detectedBy: 'heuristic',
+      evidence: [
+        {
+          type: 'project',
+          id: projectId,
+          title: 'Project',
+          detail: 'Project has zero linked resources.'
+        }
+      ],
+      createdAt: '2026-05-04T12:00:00.000Z',
+      updatedAt: '2026-05-04T12:00:00.000Z',
+      metadata: { resourceCount: 0 },
+      ...overrides
+    }
   }
 
   it('creates, updates, lists, and deletes projects', async () => {
@@ -109,6 +135,47 @@ describe('ProjectRepository', () => {
 
     expect(second.id).toBe(first.id)
     await expect(projectRepository.getLinksForResource('resource-1')).resolves.toHaveLength(1)
+  })
+
+  it('persists knowledge gaps and preserves user status across detection syncs', async () => {
+    const project = await projectRepository.create({
+      title: 'Chassis Study',
+      description: '',
+      type: 'course',
+      notes: ''
+    })
+    const firstGap = knowledgeGap(project.id)
+
+    await expect(projectRepository.syncKnowledgeGaps(project.id, [firstGap])).resolves.toMatchObject([
+      {
+        id: firstGap.id,
+        status: 'open',
+        title: 'Link one strong source'
+      }
+    ])
+
+    await expect(projectRepository.updateKnowledgeGapStatus(firstGap.id, 'dismissed')).resolves.toMatchObject({
+      id: firstGap.id,
+      status: 'dismissed'
+    })
+
+    await expect(
+      projectRepository.syncKnowledgeGaps(project.id, [
+        knowledgeGap(project.id, {
+          title: 'Link a technical source',
+          recommendation: 'Attach a reference PDF.'
+        })
+      ])
+    ).resolves.toHaveLength(0)
+
+    await expect(projectRepository.getKnowledgeGapsForProject(project.id)).resolves.toMatchObject([
+      {
+        id: firstGap.id,
+        status: 'dismissed',
+        title: 'Link a technical source',
+        recommendation: 'Attach a reference PDF.'
+      }
+    ])
   })
 
 })

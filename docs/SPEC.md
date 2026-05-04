@@ -153,6 +153,7 @@ This architecture can grow into AI-generated learning plans per project, weekly 
 
 - **Center (primary workspace)**: **Learning Workspace & Visualizer**
   - Session notes
+  - Recommended next knowledge gaps with status controls
   - Transcript/resource notices and review actions
   - AI mentor conversation
   - Learning cells: Explain • Visualize • Practice • Quiz

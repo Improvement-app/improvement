@@ -6,7 +6,7 @@ Last updated: May 4, 2026
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the right-side browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube, HPAcademy, and Udemy, local SQLite-backed captured resource storage, project-centered resource linking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, on-demand knowledge-gap recommendations, unified resource review, Pomodoro timer, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube, HPAcademy, and Udemy, local SQLite-backed captured resource storage, project-centered resource linking, persisted knowledge gaps, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, knowledge-gap recommendations, unified resource review, Pomodoro timer, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
@@ -43,7 +43,7 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - Transcript success/unavailable notices, a unified captured resource library, cleaned transcript reading view with optional timestamps, copy/delete controls, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
 - Phase 1 RAG for freeform Grok questions: the main process searches active-project resources first with FTS5, fills remaining context from the broader local library, adds top relevant excerpts to the prompt, asks Grok to cite local sources when useful, and shows the renderer whether it is searching or using matching resources.
-- Phase 3 Knowledge Gap MVP: the main process can analyze a selected project, linked resources, project/session notes, source mix, and uncovered project terms to produce open knowledge-gap recommendations; the center Learning Workspace shows them in a "Recommended next" panel with one-click Grok prompt seeding.
+- Phase 3 Knowledge Gap MVP: the main process can analyze a selected project, linked resources, project/session notes, source mix, and uncovered project terms to produce knowledge-gap recommendations; generated gaps are persisted in SQLite with `open`, `in_progress`, `resolved`, and `dismissed` statuses; the center Learning Workspace shows active gaps in a "Recommended next" panel with Work on this, Ask Grok, Mark resolved, and Dismiss controls.
 - Freeform mentor prompts now include active project metadata, project/session notes, and detected knowledge-gap recommendations alongside retrieved local resources.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
 - Follow-up mentor conversation panel in the center Learning Workspace.
@@ -59,7 +59,7 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 ## Current Limitations
 
 - Notes are saved in renderer `localStorage` only, though the resource model now supports future persisted notes.
-- Knowledge-gap recommendations are currently generated on demand with deterministic heuristics; persistent gap status, dismissal, resolution workflow, quiz signals, and repeated-question detection are future work.
+- Knowledge-gap recommendations are currently generated with deterministic heuristics; quiz signals, repeated-question detection, and automatic recommendations for specific existing resources are future work.
 - Tab persistence stores URL/title/active status only; full browser navigation history is not persisted.
 - Mentor conversation history is in-memory only and resets when the app closes.
 - Resource storage currently persists captured transcripts and imported PDFs; article, textbook, broader file-upload, and note ingestion flows are future work built on the same model.
@@ -78,7 +78,7 @@ Status: **Projects + Resource Linking + Knowledge Gap MVP implemented; old progr
 
 Improvement is moving toward a project-centered learning model where captured resources, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, with the project layer connecting resources to user-defined learning projects.
 
-Next implementation priority: **Persist knowledge gaps and expand detection signals**.
+Next implementation priority: **Expand knowledge-gap detection signals and recommendations**.
 
 ### Implemented Database Schema
 
@@ -104,15 +104,16 @@ Examples:
 
 **`knowledge_gaps`**
 
-Status: Phase 3 MVP implemented as on-demand recommendations; persistent table/workflow still planned.
+Status: Phase 3 MVP implemented with SQLite persistence and status workflow.
 
 Purpose: Stores manually or automatically identified gaps tied to a project.
 
-Suggested fields:
+Implemented fields:
 - `id TEXT PRIMARY KEY`
 - `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
 - `title TEXT NOT NULL`
 - `description TEXT`
+- `recommendation TEXT NOT NULL`
 - `status TEXT NOT NULL` — examples: `open`, `in_progress`, `resolved`, `dismissed`
 - `severity INTEGER DEFAULT 0`
 - `detected_by TEXT NOT NULL` — examples: `user`, `ai`, `quiz`, `repeated-question`
@@ -154,9 +155,9 @@ The former objective/progress layer has been removed. Projects now own captured 
 
 **Phase 3 – Knowledge Gap Detection + Recommendations**
 
-MVP implemented. The app now detects sparse project context, missing linked resources, weak note synthesis, single-source-type coverage, project terms not represented in linked resources, and unsourced note terms. The renderer shows these as "Recommended next" items for the selected project, and mentor prompts include the active project context plus current gap recommendations.
+MVP implemented. The app now detects sparse project context, missing linked resources, weak note synthesis, single-source-type coverage, project terms not represented in linked resources, and unsourced note terms. Generated gaps are stored in `knowledge_gaps`, preserving learner status changes across future detection runs. The renderer shows active gaps as "Recommended next" items for the selected project, and mentor prompts include the active project context plus current active gap recommendations.
 
-Next Phase 3 work: persist gaps with status controls, incorporate repeated mentor questions and quiz failures, recommend specific existing resources when possible, and turn gaps into schedule/tasks or practice exercises.
+Next Phase 3 work: incorporate repeated mentor questions and quiz failures, recommend specific existing resources when possible, and turn gaps into schedule/tasks or practice exercises.
 
 ## Testing Status
 
@@ -178,7 +179,7 @@ Current test coverage includes:
 - New Tab PDF import script generation and preload bridge invocation.
 - Active-project PDF import linking and renderer refresh after browser-side imports.
 - Active-project-first RAG retrieval, including scoped FTS5 resource search and global-library fallback.
-- Knowledge-gap heuristic analysis and renderer recommendations for selected projects.
+- Knowledge-gap heuristic analysis, SQLite persistence/status preservation, and renderer recommendations/status controls for selected projects.
 - Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.
 - Learning-cell prompt starter behavior.
@@ -188,7 +189,6 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 ## Next Priorities
 
-- Persist knowledge gaps with status controls (`open`, `in_progress`, `resolved`, `dismissed`) and evidence metadata.
 - Expand knowledge-gap detection with mentor conversation history, repeated questions, quiz failures, and low-confidence answers.
 - Recommend specific existing resources, practice exercises, or schedule blocks for each detected gap.
 - Add article, textbook, broader file-upload, and persisted note capture flows using the `CapturedResource` model.
