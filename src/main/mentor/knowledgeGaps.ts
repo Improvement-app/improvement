@@ -42,6 +42,7 @@ export function analyzeProjectKnowledgeGaps(input: {
   project: Project
   resources: CapturedResource[]
   sessionNotes?: string
+  recentQuestions?: string[]
   now?: Date
 }): ProjectKnowledgeGapSummary {
   const generatedAt = (input.now ?? new Date()).toISOString()
@@ -56,6 +57,7 @@ export function analyzeProjectKnowledgeGaps(input: {
       KnowledgeGapRecommendation,
       'id' | 'title' | 'description' | 'recommendation' | 'severity' | 'evidence' | 'metadata'
     >
+      & Partial<Pick<KnowledgeGapRecommendation, 'detectedBy'>>
   ): void => {
     if (gaps.some((item) => item.id === gap.id)) {
       return
@@ -65,7 +67,7 @@ export function analyzeProjectKnowledgeGaps(input: {
       ...gap,
       projectId: input.project.id,
       status: 'open',
-      detectedBy: 'heuristic',
+      detectedBy: gap.detectedBy ?? 'heuristic',
       createdAt: generatedAt,
       updatedAt: generatedAt
     })
@@ -92,6 +94,13 @@ export function analyzeProjectKnowledgeGaps(input: {
       }
     })
   }
+
+  addRepeatedQuestionGaps({
+    project: input.project,
+    recentQuestions: input.recentQuestions ?? [],
+    resourceCorpus,
+    addGap
+  })
 
   if (input.resources.length === 0) {
     addGap({
@@ -225,6 +234,65 @@ export function analyzeProjectKnowledgeGaps(input: {
     noteSignalCount: noteTerms.length,
     coveredTopics,
     gaps: gaps.slice(0, 6)
+  }
+}
+
+function addRepeatedQuestionGaps(input: {
+  project: Project
+  recentQuestions: string[]
+  resourceCorpus: { searchText: string; topicText: string }
+  addGap: (
+    gap: Pick<
+      KnowledgeGapRecommendation,
+      'id' | 'title' | 'description' | 'recommendation' | 'severity' | 'evidence' | 'metadata'
+    >
+      & Partial<Pick<KnowledgeGapRecommendation, 'detectedBy'>>
+  ) => void
+}): void {
+  const meaningfulQuestions = input.recentQuestions.map((question) => question.trim()).filter((question) => question.length >= 12)
+
+  if (meaningfulQuestions.length < 2) {
+    return
+  }
+
+  const termQuestionCounts = new Map<string, { count: number; examples: string[] }>()
+
+  for (const question of meaningfulQuestions) {
+    for (const term of new Set(extractTerms(question, 8))) {
+      const current = termQuestionCounts.get(term) ?? { count: 0, examples: [] }
+      current.count += 1
+      current.examples.push(question)
+      termQuestionCounts.set(term, current)
+    }
+  }
+
+  const repeatedTerms = [...termQuestionCounts.entries()]
+    .filter(([_term, value]) => value.count >= 2)
+    .sort((left, right) => right[1].count - left[1].count)
+    .slice(0, 2)
+
+  for (const [term, value] of repeatedTerms) {
+    const isCovered = input.resourceCorpus.searchText.includes(term)
+    input.addGap({
+      id: stableGapId(input.project.id, `repeated-question-${term}`),
+      title: `Repeated question about ${formatTerm(term)}`,
+      description: `You have asked about ${formatTerm(term)} multiple times in this project, which suggests it needs a clearer explanation, practice, or source coverage.`,
+      recommendation: isCovered
+        ? `Ask Grok to synthesize the linked resources into a short explanation and practice check for ${formatTerm(term)}.`
+        : `Capture or link a focused source for ${formatTerm(term)}, then ask Grok to turn it into a short practice sequence.`,
+      severity: isCovered ? 1 : 2,
+      detectedBy: 'repeated-question',
+      evidence: value.examples.slice(0, 3).map((question) => ({
+        type: 'mentor',
+        title: 'Recent mentor question',
+        detail: question
+      })),
+      metadata: {
+        term,
+        questionCount: value.count,
+        coveredByLinkedResource: isCovered
+      }
+    })
   }
 }
 

@@ -96,4 +96,45 @@ describe('analyzeProjectKnowledgeGaps', () => {
       ])
     )
   })
+
+  it('detects repeated mentor questions as knowledge gaps', () => {
+    const summary = analyzeProjectKnowledgeGaps({
+      project: project({
+        description: 'Understand vehicle setup tradeoffs.',
+        notes: 'I have a working project note with enough context to avoid sparse-note gaps.'
+      }),
+      resources: [
+        resource({
+          title: 'Roll Center Notes',
+          content: 'Roll center migration affects lateral load transfer and chassis balance.'
+        })
+      ],
+      recentQuestions: [
+        'How does torsional rigidity change chassis setup?',
+        'Can you explain torsional rigidity in practical terms?',
+        'What should I measure before changing spring rates?'
+      ],
+      now
+    })
+
+    expect(summary.gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Repeated question about torsional',
+          detectedBy: 'repeated-question',
+          evidence: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'mentor',
+              detail: expect.stringContaining('torsional rigidity')
+            })
+          ]),
+          metadata: expect.objectContaining({
+            term: 'torsional',
+            questionCount: 2,
+            coveredByLinkedResource: false
+          })
+        })
+      ])
+    )
+  })
 })

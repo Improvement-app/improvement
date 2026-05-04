@@ -3,7 +3,7 @@ export type KnowledgeGapSeverity = 0 | 1 | 2 | 3
 export type KnowledgeGapDetectedBy = 'heuristic' | 'ai' | 'user' | 'quiz' | 'repeated-question'
 
 export interface KnowledgeGapEvidence {
-  type: 'project' | 'resource' | 'notes'
+  type: 'project' | 'resource' | 'notes' | 'mentor'
   id?: string
   title: string
   detail: string

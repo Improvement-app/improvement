@@ -534,7 +534,7 @@ export class ProjectRepository {
       evidence: this.parseJsonArray(row.evidence_json).map((item) =>
         item && typeof item === 'object' && !Array.isArray(item)
           ? {
-              type: String((item as Record<string, unknown>).type ?? 'project') as KnowledgeGapRecommendation['evidence'][number]['type'],
+              type: this.knowledgeGapEvidenceType((item as Record<string, unknown>).type),
               id: typeof (item as Record<string, unknown>).id === 'string' ? String((item as Record<string, unknown>).id) : undefined,
               title: String((item as Record<string, unknown>).title ?? 'Evidence'),
               detail: String((item as Record<string, unknown>).detail ?? '')
@@ -567,5 +567,9 @@ export class ProjectRepository {
     } catch {
       return []
     }
+  }
+
+  private knowledgeGapEvidenceType(value: unknown): KnowledgeGapRecommendation['evidence'][number]['type'] {
+    return value === 'resource' || value === 'notes' || value === 'mentor' ? value : 'project'
   }
 }

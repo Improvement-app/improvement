@@ -73,7 +73,14 @@ interface XaiChatMessage {
   content: string
 }
 
+interface MentorQuestionSignal {
+  projectId: string
+  question: string
+  askedAt: string
+}
+
 const mentorConversation: XaiChatMessage[] = []
+const mentorQuestionSignals: MentorQuestionSignal[] = []
 
 function normalizeUrl(input: string): string {
   const trimmed = input.trim()
@@ -768,7 +775,8 @@ async function getProjectKnowledgeGapSummary(projectId: string, sessionNotes = '
   const generatedSummary = analyzeProjectKnowledgeGaps({
     project,
     resources,
-    sessionNotes
+    sessionNotes,
+    recentQuestions: getRecentProjectMentorQuestions(project.id)
   })
   const gaps = await projectRepository.syncKnowledgeGaps(project.id, generatedSummary.gaps)
 
@@ -776,6 +784,31 @@ async function getProjectKnowledgeGapSummary(projectId: string, sessionNotes = '
     ...generatedSummary,
     gaps
   }
+}
+
+function rememberMentorQuestionSignal(projectId: string | null, question: string): void {
+  const trimmed = question.replace(/\s+/g, ' ').trim()
+
+  if (!projectId || trimmed.length < 8) {
+    return
+  }
+
+  mentorQuestionSignals.push({
+    projectId,
+    question: trimmed,
+    askedAt: new Date().toISOString()
+  })
+
+  if (mentorQuestionSignals.length > 80) {
+    mentorQuestionSignals.splice(0, mentorQuestionSignals.length - 80)
+  }
+}
+
+function getRecentProjectMentorQuestions(projectId: string): string[] {
+  return mentorQuestionSignals
+    .filter((signal) => signal.projectId === projectId)
+    .slice(-12)
+    .map((signal) => signal.question)
 }
 
 function isKnowledgeGapStatus(value: unknown): value is KnowledgeGapStatus {
@@ -954,6 +987,10 @@ async function streamMentorResponse(
   let assistantMessage: MentorMessage | null = null
 
   try {
+    if (options.useKnowledgeBase) {
+      rememberMentorQuestionSignal(activeProjectId, userContent)
+    }
+
     const promptContent = options.useKnowledgeBase
       ? await buildPromptWithKnowledgeContext(userContent, options.sessionNotes)
       : userContent
