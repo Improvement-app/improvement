@@ -1,7 +1,7 @@
 # Improvement — High-Level Specification
 
-**Version**: 0.2  
-**Date**: April 26, 2026  
+**Version**: 0.3  
+**Date**: May 4, 2026  
 **Repository**: https://github.com/Improvement-app/improvement  
 **Domain**: https://improvement.app  
 **Status**: High-Level Spec (Ready for detailed planning)
@@ -30,15 +30,15 @@ The app combines a full-featured built-in browser, an intelligent AI mentor (Gro
 **Vision**  
 Become the definitive project-centered AI mentor platform for adult learners who want to master complex STEM + trade skills and actually build ambitious projects (race cars, motorcycles, engines, etc.).
 
-Improvement is evolving from a knowledge capture tool into a **Personal Learning Operating System**. Learning is organized around goal-oriented **Projects** such as courses, real-world builds, and skill deep dives. Captured resources, notes, AI conversations, goals, and knowledge gaps become part of a living project context that the AI mentor can use to guide the learner with more precision.
+Improvement is evolving from a knowledge capture tool into a **Personal Learning Operating System**. Learning is organized around outcome-oriented **Projects** such as courses, real-world builds, and skill deep dives. Captured resources, notes, AI conversations, decisions, and knowledge gaps become part of a living project context that the AI mentor can use to guide the learner with more precision.
 
 **Primary Goals**
 - Help users develop both theoretical understanding **and** practical fabrication skills
 - Provide a project-aware AI mentor that understands the full learning journey (theory → design → fabrication)
-- Make resource consumption, knowledge processing, goal tracking, and skill application seamless
+- Make resource consumption, knowledge processing, project organization, and skill application seamless
 - Link captured resources, notes, questions, and decisions to the projects where they matter
-- Track progress through course modules, learning goals, real-world tasks, and practical decisions
-- Detect knowledge gaps within a project and suggest resources, exercises, visualizations, or new learning goals
+- Track progress through course modules, linked resources, real-world tasks, and practical decisions
+- Detect knowledge gaps within a project and suggest resources, exercises, visualizations, or project actions
 - Support realistic adult schedules through smart organization tools (including future calendar integration)
 - Enable users to go from “I want to build a race car” to “I can confidently design and fabricate one”
 
@@ -74,10 +74,10 @@ Improvement is evolving from a knowledge capture tool into a **Personal Learning
 |----------------------------|--------------------------------------------------------------------------|----------|
 | **Browser**                | Multi-tab built-in browser with full web capabilities                   | MVP     |
 | **Content Capture**        | One-click highlight + send to AI, video timestamp capture               | MVP     |
-| **AI Mentor**              | Context-aware Grok-powered chat that remembers user’s learning history  | MVP     |
+| **AI Mentor**              | Context-aware Grok-powered chat that uses project resources, notes, and gaps | MVP |
 | **Knowledge Processing**   | Auto-summarization, gap detection, personalized explanations            | V1      |
 | **Visualizations**         | Generate charts, diagrams, 3D previews, fabrication process visuals     | V1      |
-| **Learning Workspace**     | Right panel: notes, AI explanations, interactive visualizations         | MVP     |
+| **Learning Workspace**     | Center panel: notes, AI explanations, interactive visualizations        | MVP     |
 | **Task & Schedule**        | Left panel: daily/weekly plans, smart time blocking, priorities         | V1      |
 | **Progress Tracking**      | Knowledge graph, mastery levels, streak, project milestones             | V1      |
 | **Resource Management**    | Saved resources, AI recommendations, personalized roadmaps              | V1      |
@@ -89,11 +89,11 @@ Improvement is evolving from a knowledge capture tool into a **Personal Learning
 
 ### Vision
 
-Improvement is evolving from a simple knowledge capture tool into a **Personal Learning Operating System**. The core organizing unit is no longer just a captured resource, transcript, PDF, note, or chat. The core organizing unit is a meaningful, goal-oriented **Project**.
+Improvement is evolving from a simple knowledge capture tool into a **Personal Learning Operating System**. The core organizing unit is no longer just a captured resource, transcript, PDF, note, or chat. The core organizing unit is a meaningful, outcome-oriented **Project**.
 
-A project can be a formal course, a real-world build, or a skill-based deep dive. Every captured resource can be linked to one or more projects, and the AI mentor becomes aware of that project context. This lets Improvement provide more relevant explanations, track progress over time, detect recurring knowledge gaps, and help the learner connect theory to action.
+A project can be a formal course, a real-world build, or a skill-based deep dive. Every captured resource can be linked to one or more projects, and the AI mentor becomes aware of that project context. This lets Improvement provide more relevant explanations, track progress over time, surface knowledge gaps, and help the learner connect theory to action.
 
-In this architecture, resources are still important, but they are no longer isolated artifacts. A YouTube transcript, HPAcademy lesson transcript, Udemy PDF, workshop note, measurement calculation, or AI answer becomes part of the project it supports. The learner can ask questions inside a project and receive guidance that understands what they are building, what they have already captured, what goals they are pursuing, and what gaps have emerged.
+In this architecture, resources are still important, but they are no longer isolated artifacts. A YouTube transcript, HPAcademy lesson transcript, Udemy PDF, workshop note, measurement calculation, or AI answer becomes part of the project it supports. The learner can ask questions inside a project and receive guidance that understands what they are building, what they have already captured, what decisions they have made, and what gaps have emerged.
 
 ### Core Entities
 
@@ -105,39 +105,32 @@ Examples:
 - **Rebuild my Spec Miata Engine**: Track information, calculations, Q&A, measurements, torque specs, machining decisions, parts research, and final build decisions for a real-world engine rebuild.
 - **Metallurgy Mastery**: Build a skill-based deep dive around materials, heat treatment, alloys, welding metallurgy, fatigue, and practical fabrication decisions.
 
-**LearningGoal** is a specific, trackable objective inside a project. Goals make a project concrete and measurable. They can be created manually by the user or suggested by the AI mentor.
-
-Example:
-- Inside **Rebuild my Spec Miata Engine**, a learning goal might be: “Understand piston clearance and proper measurement techniques.”
-
-Learning goals can eventually track status, confidence, related resources, practice tasks, quiz results, and evidence of mastery.
-
 **KnowledgeGap** is an automatically or manually identified gap tied to a project. Gaps emerge when the learner repeatedly asks questions, struggles with a concept, skips prerequisite knowledge, or asks the AI mentor to assess readiness.
 
 Example:
-- After the learner asks several questions about torsional rigidity, chassis stiffness, and load paths, the system detects a likely gap in structural mechanics. It can suggest relevant captured resources, recommend new resources, create a new learning goal, or generate a short practice sequence.
+- After the learner asks several questions about torsional rigidity, chassis stiffness, and load paths, the system detects a likely gap in structural mechanics. It can suggest relevant captured resources, recommend new resources, or generate a short practice sequence.
 
 Knowledge gaps should be treated as helpful navigation signals, not failures. They tell the learner where more structure, explanation, practice, or visualization would help.
 
-**ResourceLink** connects a `CapturedResource` to a Project and optionally to a LearningGoal. A single resource can support multiple projects or goals.
+**ResourceLink** connects a `CapturedResource` to one or more Projects. A single resource can support multiple projects.
 
 Examples:
 - A metallurgy PDF might link to both **Metallurgy Mastery** and **Rebuild my Spec Miata Engine**.
-- An HPAcademy transcript might link to the **Engine Building Fundamentals** project and to a specific learning goal about ring gap, bearing clearance, or oiling systems.
-- A note from a machine shop conversation might link to a real-world engine rebuild project and a goal about measurement technique.
+- An HPAcademy transcript might link to the **Engine Building Fundamentals** project because it explains ring gap, bearing clearance, or oiling systems.
+- A note from a machine shop conversation might link to a real-world engine rebuild project because it records measurement techniques, tolerances, or machining decisions.
 
 ### How It Works in Practice
 
-**Course-based projects** organize structured learning material from platforms such as HPAcademy, Udemy, or similar providers. The learner creates or imports a project for a course, captures transcripts (YouTube, HPAcademy, Udemy) (YouTube, HPAcademy, Udemy) and PDFs, tracks module progress, asks questions in context, and uses the mentor to generate summaries, quizzes, visual explanations, and follow-up practice prompts. The app can eventually show progress by module, resource, lesson, goal, and confidence.
+**Course-based projects** organize structured learning material from platforms such as HPAcademy, Udemy, or similar providers. The learner creates or imports a project for a course, captures transcripts (YouTube, HPAcademy, Udemy) and PDFs, tracks module progress, asks questions in context, and uses the mentor to generate summaries, quizzes, visual explanations, and follow-up practice prompts. The app can eventually show progress by module, resource, lesson, and confidence.
 
 **Real-world build projects** organize practical work where the learner is trying to produce a real outcome. A project such as **Rebuild my Spec Miata Engine** can contain captured resources, measurements, calculations, torque specs, vendor notes, Q&A, decisions, risks, and open questions. The AI mentor can help explain tradeoffs, track decisions, surface missing prerequisites, and connect theoretical resources to practical build steps.
 
-**Skill-based projects** organize deep capability development around a domain such as Metallurgy, Vehicle Dynamics, TIG Welding, CNC Workholding, or Suspension Geometry. These projects may not have a fixed course structure. Instead, they grow through captured resources, goals, practice exercises, self-assessments, and knowledge gaps. The AI mentor can help build a roadmap, suggest next concepts, and connect the skill to active real-world projects.
+**Skill-based projects** organize deep capability development around a domain such as Metallurgy, Vehicle Dynamics, TIG Welding, CNC Workholding, or Suspension Geometry. These projects may not have a fixed course structure. Instead, they grow through captured resources, practice exercises, self-assessments, and knowledge gaps. The AI mentor can help build a roadmap, suggest next concepts, and connect the skill to active real-world projects.
 
 ### Benefits
 
-- **Better context for the AI mentor**: Questions can be answered in light of the project, related resources, active goals, prior decisions, and known gaps.
-- **Progress tracking and motivation**: Projects give learners a visible sense of movement through courses, goals, build steps, and skills.
+- **Better context for the AI mentor**: Questions can be answered in light of the project, related resources, prior decisions, and known gaps.
+- **Progress tracking and motivation**: Projects give learners a visible sense of movement through courses, linked resources, build steps, and skills.
 - **Intelligent gap detection**: Repeated questions, uncertainty, and missing prerequisites can become structured KnowledgeGaps with recommended actions.
 - **Cross-resource understanding**: The learner can ask, “What do I currently know about piston clearance?” or “What have I captured about torsional rigidity?” and receive an answer synthesized across all relevant projects and resources.
 - **Connection between theory and action**: Captured knowledge can be tied directly to what the learner is building, designing, fabricating, measuring, or practicing.
@@ -152,23 +145,26 @@ This architecture can grow into AI-generated learning plans per project, weekly 
 
 **Main Layout**
 
-- **Center (primary area)**: Multi-tab **Browser**
+- **Left Sidebar (collapsible)**: **Project & Schedule Organizer**
+  - Project/resource tree
+  - New Project flow
+  - Daily schedule/time-block mode
+  - Future: calendar integration and persisted task scheduling
+
+- **Center (primary workspace)**: **Learning Workspace & Visualizer**
+  - Session notes
+  - Transcript/resource notices and review actions
+  - AI mentor conversation
+  - Learning cells: Explain • Visualize • Practice • Quiz
+  - Pomodoro timer
+  - Future: interactive visualizations and saved learning artifacts
+
+- **Right Panel**: Multi-tab **Browser**
   - Full web browsing with tab management
-  - Floating action button / context menu for “Highlight & Send to Mentor”, “Capture Video Segment”, etc.
-
-- **Left Sidebar (collapsible)**: **Task & Schedule Organizer**
-  - Daily/weekly learning plan
-  - Smart time blocks
-  - Tasks linked to learning goals and projects
-  - Future: Calendar integration
-
-- **Right Sidebar (collapsible)**: **Learning Workspace & Visualizer**
-  - Rich note-taking (markdown + rich text)
-  - AI-generated explanations and summaries
-  - Interactive visualizations and diagrams
-  - “Learning cells”: Explain • Visualize • Practice • Quiz • Connect
-
-- **Top Bar**: Logo, global search, AI Mentor access, progress overview, user profile
+  - Address/search bar and navigation controls
+  - Transcript capture for supported providers
+  - New Tab page with PDF import
+  - Floating “Send to AI” button for selected webpage text
 
 **Mobile (Future)**: Simplified experience with floating AI button and bottom navigation.
 
@@ -256,6 +252,6 @@ When working on this codebase or planning features, always refer to this spec fi
 
 ---
 
-**End of Specification v0.2**
+**End of Specification v0.3**
 
-Last updated: April 26, 2026
+Last updated: May 4, 2026

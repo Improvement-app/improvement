@@ -1,18 +1,18 @@
 # Improvement Implementation
 
-Last updated: April 28, 2026
+Last updated: May 4, 2026
 
 ## Current Status
 
 Improvement is a working Electron + React + TypeScript desktop prototype for adult technical learners. The React renderer owns the persistent app shell, while web content is constrained to the right-side browser rectangle through Electron `WebContentsView`.
 
-The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube, HPAcademy, and Uy, and Udemy, local SQLite-backed captured resource storage, project-centered resource linking, Phase 2 learning goals with project progress tracking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, unified resource review, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
+The app currently includes a persistent multi-tab browser with improved New Tab page (now featuring a prominent Import PDF button), an internal New Tab learning page, Grok/xAI mentor integration with Phase 1 SQLite FTS5 retrieval, webpage text capture via "Send to AI", modular manual transcript capture for YouTube, HPAcademy, and Udemy, local SQLite-backed captured resource storage, project-centered resource linking, a project-focused three-panel layout, and a polished center Learning Workspace with saved notes, on-demand knowledge-gap recommendations, unified resource review, Pomodoro timer, learning-cell prompt starters, mentor chat, copyable AI responses, and a visualizer placeholder.
 
 ## Completed Features
 
 - Electron + React + TypeScript project scaffold using `electron-vite`.
 - Desktop shell with dual-mode left sidebar, center Learning Workspace, and right-side multi-tab browser (no top bar; primary navigation and mode toggles live in the left panel and browser column).
-- Dual-mode left sidebar: Projects mode shows a project-goal tree, while Schedule mode shows local day time blocks that can be assigned to projects or goals.
+- Dual-mode left sidebar: Projects mode shows a project/resource tree, while Schedule mode shows local day time blocks that can be assigned to projects.
 - Multi-tab browser backed by one `WebContentsView` per tab.
 - Tab persistence in Electron's `userData` folder, including URL, title, tab order, and last active tab restore.
 - Internal New Tab page at `improvement://new-tab` with search and technical learning resource links.
@@ -20,29 +20,31 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 - Webpage text selection capture with floating "Send to AI" button.
 - Manual YouTube transcript capture via a browser toolbar "Capture Transcript" button that appears on YouTube watch pages, using a normal desktop Chrome user agent for embedded tabs, broadened transcript-panel selectors, a short wait for YouTube's dynamic rendering, and a visible-text fallback for timestamped transcript lines.
 - Manual HPAcademy transcript capture via the same browser toolbar button on HPAcademy video-like pages, reading from the visible transcript window.
-- Manual Udemy transcript capture via the same browser toolbar button on Udemy course/lecture pages (udemy.com, members.udemy.com), using the modular registry, visible transcript panel selectors (data-purpose="transcript-panel", .transcript-panel, etc.), and fallback message if panel not open.
+- Manual Udemy transcript capture via the same browser toolbar button on Udemy course/lecture pages (udemy.com, members.udemy.com), with renderer toolbar detection aligned to the Udemy extractor, visible transcript panel selectors (data-purpose="transcript-panel", .transcript-panel, etc.), and fallback message if panel not open.
 - Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube, HPAcademy, and Udemy extractors (in subfolders)script panel selectors (data-purpose="transcript-panel", .transcript-panel, etc.), and fallback message if panel not open.
 - Modular transcript extractor architecture under `src/main/transcript/`, with a shared `TranscriptExtractor` base class, provider-specific YouTube, HPAcademy, and Udemy extractors (in subfolders), and a registry/factory for selecting the right extractor by URL.
 - Unified `CapturedResource` model for transcripts, PDFs, articles, textbooks, notes, and future resource types.
 - SQLite-backed `ResourceRepository` under `src/main/resources/`, stored at Electron `userData/resources.db`, with save, lookup, list, search, delete, and type-filter methods.
-- SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through `ResourceRepository.searchRelevant()`.
+- SQLite FTS5 virtual table for resource `title` and `content`, kept in sync with triggers and exposed through global and resource-id-scoped relevant-resource search.
 - SQLite-backed `ProjectRepository` under `src/main/projects/`, stored in the same `resources.db`, with project CRUD and resource linking/unlinking.
-- SQLite-backed `LearningGoalRepository` under `src/main/projects/`, with goal CRUD, status updates, completion timestamps, and project progress calculation.
-- Phase 1 Project-Centered Learning UI: left sidebar project/goal tree with "New Project" button and form (moved from center), center Learning Workspace with streamlined goals/resources/mentor (no top Projects box or workspace header), All Resources view, per-project linked-resource view, link/unlink controls, project delete (optional associated resources), and resource delete buttons in lists (with optional on-disk file deletion for PDFs).
-- Phase 2 goal UI in the center Learning Workspace: goal list, status badges, status changes, edit/delete controls, progress bar, active-goal selector, and "New Goal" form.
-- Learning Workspace streamlined in primary center panel (transcript notices, goals, resources, mentor chat) with project context driven by left sidebar selection.
+- Project-Centered Learning UI: left sidebar project/resource tree with "New Project" button and form (moved from center), center Learning Workspace with streamlined resources/mentor/Pomodoro (no top Projects box or workspace header), All Resources view, per-project linked-resource view, link/unlink controls, project delete (optional associated resources), and resource delete buttons in lists (with optional on-disk file deletion for PDFs).
+- Learning Workspace streamlined in primary center panel (transcript notices, resources, Pomodoro timer, mentor chat) with project context driven by left sidebar selection.
 - Multi-tab browser moved to the right panel while retaining tabs, address bar, navigation, transcript capture, PDF import on New Tab, and the Electron `WebContentsView` bounds flow.
 - April 28 layout fix: the shell now uses explicit `react-resizable-panels` ordering of left sidebar, center Learning Workspace, and right Browser panel. The complete browser implementation renders only in the right panel, and the `browserFrameRef` / `ResizeObserver` / `setBrowserBounds` flow is attached to the right-panel browser frame so the active `WebContentsView` fills and resizes with that container.
 - **Browser clipping fix (April 28)**: `react-resizable-panels` `PanelResizeHandle`s (visible ~6-10px wide, 2 handles) caused total defaultSize sum (22+38+40=100) to overflow the container, clipping the right browser pane. Reduced to 21/37/37 (95% total) to leave buffer for handles; `.browser-frame` explicitly uses `box-sizing: border-box`, `width/height: 100%`, `min-*`: 0, `overflow: hidden`. `onLayoutChange` triggers `scheduleBrowserBoundsUpdate` on drags. Browser now displays full-width sites; resizing remains smooth.
-- Empty selected projects now show captured resources as link candidates until project resources exist, preserving the project/goal resource-linking workflow after project creation.
-- Transcript captures and PDF imports can be linked to the active project and active goal so newly captured learning material lands in the right context immediately.
+- Empty selected projects now show captured resources as link candidates until project resources exist, preserving the project resource-linking workflow after project creation.
+- Transcript captures and PDF imports can be linked to the active project so newly captured learning material lands in the right context immediately.
 - Native SQLite rebuild scripts for `better-sqlite3`, with Electron launches rebuilding against Electron's Node ABI and tests rebuilding against the local Node ABI.
 - PDF imports copy selected files into Electron `userData/pdfs/`, extract text into `CapturedResource` records, store the local file path in metadata, and open the actual PDF in a new browser tab through Electron's native PDF viewer.
-- Import PDF button moved from the Learning Workspace's resource-import-card to a prominent, styled button on the New Tab page (`improvement://new-tab`) in the right-side browser panel. Updated browser preload with contextBridge exposure for `window.improvement.importPdfResource()`, added inline HTML/JS/CSS for the button and success handling. Removed old button, wrapper function, and state from renderer/App.tsx to eliminate duplicates. Linking to active project/goal continues to work via the shared import flow.
+- Import PDF button moved from the Learning Workspace's resource-import-card to a prominent, styled button on the New Tab page (`improvement://new-tab`) in the right-side browser panel. Updated browser preload with contextBridge exposure for `window.improvement.importPdfResource()`, added inline HTML/JS/CSS for the button and success handling. Removed old button, wrapper function, and state from renderer/App.tsx to eliminate duplicates. Linking to the active project continues to work via the shared import flow.
+- New Tab PDF import script is generated from a pure helper and kept as browser-safe JavaScript, with regression coverage ensuring the button calls the preload-exposed `window.improvement.importPdfResource()` bridge.
+- Browser-side PDF imports now link to the active project through a main-process active project context, then emit a resource-imported event so the renderer refreshes project/resource lists without requiring restart.
 - Transcript captures are now saved as `CapturedResource` rows with `type = "transcript"` and provider metadata.
 - Transcript success/unavailable notices, a unified captured resource library, cleaned transcript reading view with optional timestamps, copy/delete controls, and one-click "Send to Grok" actions in the learning workspace.
 - xAI/Grok streaming chat integration through the Electron main process.
-- Phase 1 RAG for freeform Grok questions: the main process searches local resources with FTS5, adds the top relevant excerpts to the prompt, asks Grok to cite local sources when useful, and shows the renderer whether it is searching or using matching resources.
+- Phase 1 RAG for freeform Grok questions: the main process searches active-project resources first with FTS5, fills remaining context from the broader local library, adds top relevant excerpts to the prompt, asks Grok to cite local sources when useful, and shows the renderer whether it is searching or using matching resources.
+- Phase 3 Knowledge Gap MVP: the main process can analyze a selected project, linked resources, project/session notes, source mix, and uncovered project terms to produce open knowledge-gap recommendations; the center Learning Workspace shows them in a "Recommended next" panel with one-click Grok prompt seeding.
+- Freeform mentor prompts now include active project metadata, project/session notes, and detected knowledge-gap recommendations alongside retrieved local resources.
 - API key handling through `XAI_API_KEY` or a temporary in-memory key entered in the sidebar.
 - Follow-up mentor conversation panel in the center Learning Workspace.
 - Session notes area with local save support.
@@ -57,6 +59,7 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 ## Current Limitations
 
 - Notes are saved in renderer `localStorage` only, though the resource model now supports future persisted notes.
+- Knowledge-gap recommendations are currently generated on demand with deterministic heuristics; persistent gap status, dismissal, resolution workflow, quiz signals, and repeated-question detection are future work.
 - Tab persistence stores URL/title/active status only; full browser navigation history is not persisted.
 - Mentor conversation history is in-memory only and resets when the app closes.
 - Resource storage currently persists captured transcripts and imported PDFs; article, textbook, broader file-upload, and note ingestion flows are future work built on the same model.
@@ -71,11 +74,11 @@ The app currently includes a persistent multi-tab browser with improved New Tab 
 
 ## Current Architecture – Project Layer
 
-Status: **Phase 2 implemented – Learning Goals + Progress Tracking**.
+Status: **Projects + Resource Linking + Knowledge Gap MVP implemented; old progress layer removed**.
 
-Improvement is moving toward a project-centered learning model where captured resources, goals, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, with the new project layer now connecting resources to user-defined learning projects.
+Improvement is moving toward a project-centered learning model where captured resources, knowledge gaps, notes, and AI conversations can be organized around meaningful projects. The current `CapturedResource` and SQLite resource system remains the foundation, with the project layer connecting resources to user-defined learning projects.
 
-Next implementation priority: **Phase 3 = Knowledge Gap Detection + Recommendations**.
+Next implementation priority: **Persist knowledge gaps and expand detection signals**.
 
 ### Implemented Database Schema
 
@@ -99,37 +102,15 @@ Examples:
 - **Rebuild my Spec Miata Engine** as a real-world build project
 - **Metallurgy Mastery** as a skill-focused project
 
-**`learning_goals`**
-
-Status: implemented in Phase 2.
-
-Purpose: Stores specific, trackable objectives inside a project.
-
-Implemented fields:
-- `id TEXT PRIMARY KEY`
-- `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
-- `title TEXT NOT NULL`
-- `description TEXT`
-- `status TEXT NOT NULL` — allowed values: `todo`, `in-progress`, `done`
-- `priority INTEGER NOT NULL` — 1-5
-- `created_at TEXT NOT NULL`
-- `completed_at TEXT`
-- `notes TEXT`
-
-Example:
-- Project: **Rebuild my Spec Miata Engine**
-- Goal: “Understand piston clearance and proper measurement techniques”
-
 **`knowledge_gaps`**
 
-Status: planned for Phase 3.
+Status: Phase 3 MVP implemented as on-demand recommendations; persistent table/workflow still planned.
 
-Purpose: Stores manually or automatically identified gaps tied to a project and optionally to a goal.
+Purpose: Stores manually or automatically identified gaps tied to a project.
 
 Suggested fields:
 - `id TEXT PRIMARY KEY`
 - `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
-- `learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL`
 - `title TEXT NOT NULL`
 - `description TEXT`
 - `status TEXT NOT NULL` — examples: `open`, `in_progress`, `resolved`, `dismissed`
@@ -141,7 +122,7 @@ Suggested fields:
 - `metadata_json TEXT NOT NULL DEFAULT '{}'`
 
 Example:
-- The learner repeatedly asks about torsional rigidity, stiffness, and load paths. The system creates a gap around structural mechanics and suggests resources or a new learning goal.
+- The learner repeatedly asks about torsional rigidity, stiffness, and load paths. The system creates a gap around structural mechanics and suggests resources or practice exercises.
 
 **`resource_links`**
 
@@ -151,7 +132,6 @@ Implemented fields:
 - `id TEXT PRIMARY KEY`
 - `resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE`
 - `project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE`
-- `learning_goal_id TEXT REFERENCES learning_goals(id) ON DELETE SET NULL`
 - `linked_at TEXT NOT NULL`
 - `notes TEXT`
 - `relevance_score REAL NOT NULL DEFAULT 1`
@@ -159,23 +139,24 @@ Implemented fields:
 
 Design notes:
 - A single resource can link to multiple projects.
-- A single resource can support multiple learning goals.
-- Resource links should eventually improve RAG retrieval by letting the AI mentor search within the active project first, then broaden to related projects or the full library.
+- Resource links improve RAG retrieval by letting the AI mentor search within the active project first, then broaden to the full library when useful.
 - This schema is intentionally compatible with future vector embeddings and chunk-level resource links.
 
 ### Implementation Phases
 
 **Phase 1 – Projects + Resource Linking**
 
-Complete. The app now supports project CRUD through `ProjectRepository`, resource linking/unlinking through `resource_links`, IPC/preload APIs for project operations, and center-workspace UI for creating projects, selecting project context, viewing linked resources, and linking/unlinking saved resources. RAG is still global and will be made project-aware in a later phase.
+Complete. The app now supports project CRUD through `ProjectRepository`, resource linking/unlinking through `resource_links`, IPC/preload APIs for project operations, center-workspace UI for creating projects, selecting project context, viewing linked resources, and linking/unlinking saved resources, and active-project-first RAG retrieval with global library fallback.
 
-**Phase 2 – Learning Goals + Progress Tracking**
+**Removed – Objective Progress Tracking**
 
-Complete. The app now supports learning goal CRUD through `LearningGoalRepository`, goal status changes (`todo`, `in-progress`, `done`), completion timestamps, project progress calculation, center-workspace progress display, and resource links that can optionally point at a specific goal.
+The former objective/progress layer has been removed. Projects now own captured resources directly, and the center Learning Workspace focuses on notes, Pomodoro timing, project resources, and mentor interaction.
 
 **Phase 3 – Knowledge Gap Detection + Recommendations**
 
-Identify repeated questions, low-confidence areas, missing prerequisites, or quiz failures as KnowledgeGaps. Use those gaps to recommend captured resources, new resources, practice exercises, visualizations, or new learning goals.
+MVP implemented. The app now detects sparse project context, missing linked resources, weak note synthesis, single-source-type coverage, project terms not represented in linked resources, and unsourced note terms. The renderer shows these as "Recommended next" items for the selected project, and mentor prompts include the active project context plus current gap recommendations.
+
+Next Phase 3 work: persist gaps with status controls, incorporate repeated mentor questions and quiz failures, recommend specific existing resources when possible, and turn gaps into schedule/tasks or practice exercises.
 
 ## Testing Status
 
@@ -191,11 +172,13 @@ Current test coverage includes:
 - SQLite FTS5 relevant-resource search, including index synchronization on save/update/delete.
 - SQLite project/repository CRUD, getLinkedResourceIds, and resource linking/unlinking.
 - Renderer project/resource creation/selection/deletion UI (with confirm dialogs and optional file/resource cleanup), linking controls, and tree/list delete buttons.
-- SQLite learning goal repository CRUD, completion handling, and project progress calculation.
-- Renderer learning goal creation, editing, deletion, status changes, progress display, and goal-aware resource linking controls.
 - Renderer layout coverage for the left project tree, Schedule mode, and time-block assignments.
 - Renderer layout coverage now asserts the sidebar, Learning Workspace, and Browser DOM order so the native `WebContentsView` bounds target remains the right panel.
 - PDF filename cleanup and PDF resource browser-opening behavior.
+- New Tab PDF import script generation and preload bridge invocation.
+- Active-project PDF import linking and renderer refresh after browser-side imports.
+- Active-project-first RAG retrieval, including scoped FTS5 resource search and global-library fallback.
+- Knowledge-gap heuristic analysis and renderer recommendations for selected projects.
 - Learning workspace knowledge-base status indicator for RAG searches.
 - Session notes saving to local storage.
 - Learning-cell prompt starter behavior.
@@ -205,9 +188,9 @@ Tests are now required for new features when appropriate, especially renderer wo
 
 ## Next Priorities
 
-- Knowledge Gap Detection + Recommendations (Phase 3).
-- Make RAG prefer resources linked to the active project, then broaden to all resources when needed.
-- Let RAG and mentor prompts use active project and active goal context.
+- Persist knowledge gaps with status controls (`open`, `in_progress`, `resolved`, `dismissed`) and evidence metadata.
+- Expand knowledge-gap detection with mentor conversation history, repeated questions, quiz failures, and low-confidence answers.
+- Recommend specific existing resources, practice exercises, or schedule blocks for each detected gap.
 - Add article, textbook, broader file-upload, and persisted note capture flows using the `CapturedResource` model.
 - Persist notes and mentor sessions in the local-first database.
 - Add vector embeddings and chunk-level semantic retrieval alongside FTS5.

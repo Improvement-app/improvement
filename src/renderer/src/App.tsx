@@ -6,17 +6,15 @@ import type {
   CapturedSelection,
   MentorMessage,
   RagResourceReference,
+  ResourceImportedEvent,
   TabsSnapshot,
   TranscriptCaptureEvent,
   XaiStatus
 } from '../../shared/ipc'
+import type { KnowledgeGapRecommendation, ProjectKnowledgeGapSummary } from '../../shared/knowledgeGaps'
 import type {
-  LearningGoal,
-  LearningGoalInput,
-  LearningGoalStatus,
   Project,
   ProjectInput,
-  ProjectProgress,
   ProjectResourceLink,
   ProjectType
 } from '../../shared/projects'
@@ -28,6 +26,12 @@ const initialSnapshot: TabsSnapshot = {
 }
 
 type LeftSidebarMode = 'projects' | 'schedule'
+type PomodoroMode = 'focus' | 'break'
+
+const pomodoroDurations: Record<PomodoroMode, number> = {
+  focus: 25 * 60,
+  break: 5 * 60
+}
 
 const scheduleSlots = [
   '8:00-9:00',
@@ -93,6 +97,21 @@ function isHPAcademyVideoPage(url: string): boolean {
   }
 }
 
+function isUdemyVideoPage(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.replace(/^www\./, '')
+
+    if (hostname !== 'udemy.com' && hostname !== 'members.udemy.com') {
+      return false
+    }
+
+    return /\/(course|courses|learn|lecture|watch)/i.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
 function formatSavedTime(value: string | null): string {
   if (!value) {
     return 'Not saved yet'
@@ -124,10 +143,11 @@ function resourceIcon(type: string): string {
   return 'R'
 }
 
-function goalStatusLabel(status: LearningGoalStatus): string {
-  if (status === 'in-progress') return 'In Progress'
-  if (status === 'done') return 'Done'
-  return 'Todo'
+function formatPomodoroTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
 function resourceFromTranscriptEvent(event: Extract<TranscriptCaptureEvent, { type: 'captured' }>): CapturedResource {
@@ -142,97 +162,6 @@ function resourceFromTranscriptEvent(event: Extract<TranscriptCaptureEvent, { ty
     metadata: { capturedFrom: 'manual-transcript-capture' },
     tags: ['transcript']
   }
-}
-
-interface TranscriptSegment {
-  timestamp: string
-  text: string
-}
-
-function parseTranscriptSegments(content: string): TranscriptSegment[] {
-  const timestampPattern = /(?:^|\s)(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:-\s*)?/g
-  const matches = [...content.matchAll(timestampPattern)]
-
-  return matches
-    .map((match, index) => {
-      const start = (match.index ?? 0) + match[0].length
-      const end = matches[index + 1]?.index ?? content.length
-      const text = content.slice(start, end).replace(/\s+/g, ' ').trim()
-
-      return {
-        timestamp: match[1],
-        text
-      }
-    })
-    .filter((segment) => segment.text.length > 0)
-}
-
-function cleanTranscriptText(content: string): string {
-  return content
-    .replace(/(?:^|\s)\d{1,2}:\d{2}(?::\d{2})?\s*(?:-\s*)?/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function transcriptParagraphs(content: string): string[] {
-  const segments = parseTranscriptSegments(content)
-
-  if (segments.length === 0) {
-    return content
-      .split(/\n{2,}/)
-      .map((paragraph) => cleanTranscriptText(paragraph))
-      .filter(Boolean)
-  }
-
-  const paragraphs: string[] = []
-  let current = ''
-
-  for (const segment of segments) {
-    current = `${current} ${segment.text}`.trim()
-
-    if (current.length >= 260 && /[.!?]"?$/.test(segment.text)) {
-      paragraphs.push(current)
-      current = ''
-    }
-  }
-
-  if (current) {
-    paragraphs.push(current)
-  }
-
-  return paragraphs.length > 0 ? paragraphs : [cleanTranscriptText(content)].filter(Boolean)
-}
-
-function TranscriptResourcePreview({
-  resource,
-  showTimestamps
-}: {
-  resource: CapturedResource
-  showTimestamps: boolean
-}): ReactElement {
-  const segments = parseTranscriptSegments(resource.content)
-  const paragraphs = transcriptParagraphs(resource.content)
-
-  if (showTimestamps && segments.length > 0) {
-    return (
-      <div className="transcript-readable timestamped">
-        {segments.map((segment, index) => (
-          <p key={`${segment.timestamp}-${index}`} className="transcript-line">
-            <span className="transcript-timestamp">{segment.timestamp}</span>
-            <span>{segment.text}</span>
-          </p>
-        ))}
-      </div>
-    )
-  }
-
-  return (
-    <div className="transcript-readable">
-      {paragraphs.map((paragraph, index) => (
-        <p key={index}>{paragraph}</p>
-      ))}
-    </div>
-  )
 }
 
 function FormattedMentorContent({ content }: { content: string }): ReactElement {
@@ -273,6 +202,7 @@ function FormattedMentorContent({ content }: { content: string }): ReactElement 
 export default function App(): ReactElement {
   const browserFrameRef = useRef<HTMLDivElement | null>(null)
   const scheduleBrowserBoundsUpdateRef = useRef<() => void>(() => undefined)
+  const selectedProjectIdRef = useRef('')
   const [snapshot, setSnapshot] = useState<TabsSnapshot>(initialSnapshot)
   const [address, setAddress] = useState('')
   const [leftMode, setLeftMode] = useState<LeftSidebarMode>('projects')
@@ -292,43 +222,44 @@ export default function App(): ReactElement {
   const [copiedResourceId, setCopiedResourceId] = useState<string | null>(null)
   const [transcriptNotice, setTranscriptNotice] = useState<TranscriptCaptureEvent | null>(null)
   const [capturedResources, setCapturedResources] = useState<CapturedResource[]>([])
-  const [projectResources, setProjectResources] = useState<CapturedResource[]>([])
+  const [projectResourcesByProject, setProjectResourcesByProject] = useState<Record<string, CapturedResource[]>>({})
+  const [knowledgeGapSummary, setKnowledgeGapSummary] = useState<ProjectKnowledgeGapSummary | null>(null)
+  const [isLoadingKnowledgeGaps, setIsLoadingKnowledgeGaps] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
-  const [goalsByProject, setGoalsByProject] = useState<Record<string, LearningGoal[]>>({})
   const [selectedProjectId, setSelectedProjectId] = useState('')
-  const [learningGoals, setLearningGoals] = useState<LearningGoal[]>([])
-  const [projectProgress, setProjectProgress] = useState<ProjectProgress | null>(null)
-  const [selectedGoalId, setSelectedGoalId] = useState('')
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [selectedResourceLinks, setSelectedResourceLinks] = useState<ProjectResourceLink[]>([])
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
   const [newProjectTitle, setNewProjectTitle] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
   const [newProjectType, setNewProjectType] = useState<'course' | 'build' | 'skill' | 'general'>('general')
-  const [showNewGoalForm, setShowNewGoalForm] = useState(false)
-  const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
-  const [goalTitle, setGoalTitle] = useState('')
-  const [goalDescription, setGoalDescription] = useState('')
-  const [goalPriority, setGoalPriority] = useState(3)
-  const [showTranscriptTimestamps, setShowTranscriptTimestamps] = useState(false)
   const [isCapturingTranscript, setIsCapturingTranscript] = useState(false)
+  const [pomodoroMode, setPomodoroMode] = useState<PomodoroMode>('focus')
+  const [pomodoroSeconds, setPomodoroSeconds] = useState(pomodoroDurations.focus)
+  const [isPomodoroRunning, setIsPomodoroRunning] = useState(false)
 
   const activeTab = useMemo(() => activeTabFrom(snapshot), [snapshot])
-  const canCaptureTranscript = Boolean(activeTab && (isYouTubeWatchPage(activeTab.url) || isHPAcademyVideoPage(activeTab.url)))
+  const canCaptureTranscript = Boolean(
+    activeTab && (isYouTubeWatchPage(activeTab.url) || isHPAcademyVideoPage(activeTab.url) || isUdemyVideoPage(activeTab.url))
+  )
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId]
   )
-  const selectedGoal = useMemo(
-    () => learningGoals.find((goal) => goal.id === selectedGoalId) ?? null,
-    [learningGoals, selectedGoalId]
+  const pomodoroTime = formatPomodoroTime(pomodoroSeconds)
+  const linkedProjectResources = useMemo(
+    () => Object.values(projectResourcesByProject).flat(),
+    [projectResourcesByProject]
   )
-  const isShowingProjectResources = Boolean(selectedProject && projectResources.length > 0)
-  const displayedResources = isShowingProjectResources ? projectResources : capturedResources
   const selectedResource = useMemo(
-    () => displayedResources.find((resource) => resource.id === selectedResourceId) ?? displayedResources[0] ?? null,
-    [displayedResources, selectedResourceId]
+    () =>
+      capturedResources.find((resource) => resource.id === selectedResourceId) ??
+      linkedProjectResources.find((resource) => resource.id === selectedResourceId) ??
+      null,
+    [capturedResources, linkedProjectResources, selectedResourceId]
   )
+  const selectedKnowledgeGapSummary = knowledgeGapSummary?.projectId === selectedProjectId ? knowledgeGapSummary : null
+  const selectedKnowledgeGaps = selectedKnowledgeGapSummary?.gaps ?? []
 
   useEffect(() => {
     window.improvement.getXaiStatus().then(setXaiStatus).catch(() => {
@@ -391,12 +322,22 @@ export default function App(): ReactElement {
       }
     })
 
+    const disposeResourceImported = window.improvement.onResourceImported((event) => {
+      void refreshAfterResourceImport(event)
+    })
+
     return () => {
       disposeTabs()
       disposeSelections()
       disposeMentorStream()
+      disposeResourceImported()
     }
   }, [])
+
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId
+    window.improvement.setActiveProjectContext(selectedProjectId || null)
+  }, [selectedProjectId])
 
   const loadCapturedResources = async (fallback?: CapturedResource): Promise<void> => {
     try {
@@ -406,13 +347,14 @@ export default function App(): ReactElement {
       setCapturedResources(nextResources)
       if (selectedProjectId) {
         nextProjectResources = await window.improvement.getProjectResources(selectedProjectId)
-        setProjectResources(nextProjectResources)
+        setProjectResourcesByProject((items) => ({ ...items, [selectedProjectId]: nextProjectResources }))
       }
       const visibleResources = selectedProjectId ? nextProjectResources : nextResources
       setSelectedResourceId((currentId) =>
-        currentId && visibleResources.some((resource) => resource.id === currentId)
+        fallback?.id ??
+        (currentId && visibleResources.some((resource) => resource.id === currentId)
           ? currentId
-          : visibleResources[0]?.id ?? null
+          : null)
       )
     } catch {
       if (fallback) {
@@ -426,11 +368,11 @@ export default function App(): ReactElement {
   const loadProjects = async (): Promise<void> => {
     try {
       const nextProjects = await window.improvement.getProjects()
-      const goalEntries = await Promise.all(
-        nextProjects.map(async (project) => [project.id, await window.improvement.getLearningGoals(project.id)] as const)
+      const resourceEntries = await Promise.all(
+        nextProjects.map(async (project) => [project.id, await window.improvement.getProjectResources(project.id)] as const)
       )
       setProjects(nextProjects)
-      setGoalsByProject(Object.fromEntries(goalEntries))
+      setProjectResourcesByProject(Object.fromEntries(resourceEntries))
       setExpandedProjectIds((expandedIds) => new Set([...expandedIds, ...nextProjects.map((project) => project.id)]))
     } catch {
       setMentorError('Unable to load projects.')
@@ -439,41 +381,60 @@ export default function App(): ReactElement {
 
   const loadProjectResources = async (projectId: string): Promise<CapturedResource[]> => {
     if (!projectId) {
-      setProjectResources([])
       return []
     }
 
     const resources = await window.improvement.getProjectResources(projectId)
-    setProjectResources(resources)
+    setProjectResourcesByProject((items) => ({ ...items, [projectId]: resources }))
     return resources
-  }
-
-  const loadLearningGoals = async (projectId: string): Promise<LearningGoal[]> => {
-    if (!projectId) {
-      setLearningGoals([])
-      setProjectProgress(null)
-      setSelectedGoalId('')
-      return []
-    }
-
-    const [goals, progress] = await Promise.all([
-      window.improvement.getLearningGoals(projectId),
-      window.improvement.getProjectProgress(projectId)
-    ])
-    setLearningGoals(goals)
-    setGoalsByProject((items) => ({ ...items, [projectId]: goals }))
-    setProjectProgress(progress)
-    setSelectedGoalId((currentId) =>
-      currentId && goals.some((goal) => goal.id === currentId)
-        ? currentId
-        : goals.find((goal) => goal.status !== 'done')?.id ?? goals[0]?.id ?? ''
-    )
-    return goals
   }
 
   const loadProjectWorkspace = async (projectId: string): Promise<CapturedResource[]> => {
-    const [resources] = await Promise.all([loadProjectResources(projectId), loadLearningGoals(projectId)])
-    return resources
+    return loadProjectResources(projectId)
+  }
+
+  const loadKnowledgeGaps = async (projectId: string, sessionNotes = notes): Promise<void> => {
+    if (!projectId) {
+      setKnowledgeGapSummary(null)
+      return
+    }
+
+    setIsLoadingKnowledgeGaps(true)
+    try {
+      setKnowledgeGapSummary(await window.improvement.getProjectKnowledgeGaps(projectId, sessionNotes))
+    } catch {
+      setKnowledgeGapSummary(null)
+      setMentorError('Unable to analyze knowledge gaps for this project.')
+    } finally {
+      setIsLoadingKnowledgeGaps(false)
+    }
+  }
+
+  const refreshAfterResourceImport = async (event: ResourceImportedEvent): Promise<void> => {
+    try {
+      const nextResources = await window.improvement.getCapturedResources()
+      const nextProjects = await window.improvement.getProjects()
+      const resourceEntries = await Promise.all(
+        nextProjects.map(async (project) => [project.id, await window.improvement.getProjectResources(project.id)] as const)
+      )
+      const nextProjectResourcesByProject = Object.fromEntries(resourceEntries)
+      const projectId = event.linkedProjectId ?? selectedProjectIdRef.current
+
+      setCapturedResources(nextResources.length > 0 ? nextResources : [event.resource])
+      setProjects(nextProjects)
+      setProjectResourcesByProject(nextProjectResourcesByProject)
+      setExpandedProjectIds((expandedIds) => (projectId ? new Set([...expandedIds, projectId]) : expandedIds))
+      setSelectedResourceId(event.resource.id)
+      if (projectId) {
+        await loadKnowledgeGaps(projectId)
+      }
+    } catch {
+      setCapturedResources((resources) =>
+        resources.some((resource) => resource.id === event.resource.id) ? resources : [event.resource, ...resources]
+      )
+      setSelectedResourceId(event.resource.id)
+      setMentorError('Unable to refresh resources after importing the PDF.')
+    }
   }
 
   useEffect(() => {
@@ -486,6 +447,27 @@ export default function App(): ReactElement {
       setSelectedResourceLinks([])
     })
   }, [selectedResource?.id])
+
+  useEffect(() => {
+    if (!isPomodoroRunning) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setPomodoroSeconds((seconds) => {
+        if (seconds > 1) {
+          return seconds - 1
+        }
+
+        setIsPomodoroRunning(false)
+        const nextMode: PomodoroMode = pomodoroMode === 'focus' ? 'break' : 'focus'
+        setPomodoroMode(nextMode)
+        return pomodoroDurations[nextMode]
+      })
+    }, 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [isPomodoroRunning, pomodoroMode])
 
   useEffect(() => {
     const frame = browserFrameRef.current
@@ -563,21 +545,18 @@ export default function App(): ReactElement {
   const selectProject = async (projectId: string): Promise<void> => {
     setSelectedProjectId(projectId)
     if (!projectId) {
-      setProjectResources([])
-      setLearningGoals([])
-      setProjectProgress(null)
-      setSelectedGoalId('')
-      setSelectedResourceId(capturedResources[0]?.id ?? null)
+      setSelectedResourceId(null)
+      setKnowledgeGapSummary(null)
       return
     }
 
     const resources = await loadProjectWorkspace(projectId)
-    setSelectedResourceId(resources[0]?.id ?? null)
-  }
-
-  const selectGoalFromNavigation = async (goal: LearningGoal): Promise<void> => {
-    await selectProject(goal.projectId)
-    setSelectedGoalId(goal.id)
+    await loadKnowledgeGaps(projectId)
+    setSelectedResourceId((currentId) =>
+      currentId && resources.some((resource) => resource.id === currentId)
+        ? currentId
+        : null
+    )
   }
 
   const toggleProjectExpanded = (projectId: string): void => {
@@ -599,16 +578,15 @@ export default function App(): ReactElement {
       return
     }
 
-    const [kind, projectId, goalId] = value.split(':')
+    const [kind, projectId] = value.split(':')
     if (kind === 'project') {
       await selectProject(projectId)
-      return
     }
+  }
 
-    const goal = goalsByProject[projectId]?.find((item) => item.id === goalId)
-    if (goal) {
-      await selectGoalFromNavigation(goal)
-    }
+  const selectResourceFromNavigation = async (projectId: string, resourceId: string): Promise<void> => {
+    await selectProject(projectId)
+    setSelectedResourceId(resourceId)
   }
 
   const createProject = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -628,7 +606,6 @@ export default function App(): ReactElement {
     const project = await window.improvement.createProject(input)
 
     setProjects((items) => [project, ...items])
-    setGoalsByProject((items) => ({ ...items, [project.id]: [] }))
     setExpandedProjectIds((items) => new Set([...items, project.id]))
     setNewProjectTitle('')
     setNewProjectDescription('')
@@ -637,69 +614,9 @@ export default function App(): ReactElement {
     await selectProject(project.id)
   }
 
-  const resetGoalForm = (): void => {
-    setEditingGoalId(null)
-    setGoalTitle('')
-    setGoalDescription('')
-    setGoalPriority(3)
-  }
-
-  const startEditingGoal = (goal: LearningGoal): void => {
-    setShowNewGoalForm(false)
-    setEditingGoalId(goal.id)
-    setGoalTitle(goal.title)
-    setGoalDescription(goal.description)
-    setGoalPriority(goal.priority)
-  }
-
-  const saveGoal = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-
-    if (!selectedProjectId || goalTitle.trim().length === 0) {
-      return
-    }
-
-    let createdGoalId = ''
-    if (editingGoalId) {
-      await window.improvement.updateLearningGoal({
-        id: editingGoalId,
-        title: goalTitle,
-        description: goalDescription,
-        priority: goalPriority
-      })
-    } else {
-      const input: LearningGoalInput = {
-        projectId: selectedProjectId,
-        title: goalTitle,
-        description: goalDescription,
-        priority: goalPriority,
-        notes: ''
-      }
-      const goal = await window.improvement.createLearningGoal(input)
-      createdGoalId = goal.id
-    }
-
-    resetGoalForm()
-    setShowNewGoalForm(false)
-    await loadLearningGoals(selectedProjectId)
-    if (createdGoalId) {
-      setSelectedGoalId(createdGoalId)
-    }
-  }
-
-  const updateGoalStatus = async (goal: LearningGoal, status: LearningGoalStatus): Promise<void> => {
-    await window.improvement.updateLearningGoal({ id: goal.id, status })
-    await loadLearningGoals(goal.projectId)
-  }
-
-  const deleteGoal = async (goal: LearningGoal): Promise<void> => {
-    await window.improvement.deleteLearningGoal(goal.id)
-    await loadLearningGoals(goal.projectId)
-  }
-
   const deleteProject = async (id: string): Promise<void> => {
     const deleteResources = confirm(
-      'Delete this project and its goals?\n\n' +
+      'Delete this project?\n\n' +
       'OK = also permanently delete associated resources (PDFs, transcripts, notes, etc.).\n' +
       'Cancel = keep resources (just unlink from this project).'
     )
@@ -707,11 +624,9 @@ export default function App(): ReactElement {
     await loadProjects()
     if (selectedProjectId === id) {
       setSelectedProjectId('')
-      setLearningGoals([])
-      setProjectProgress(null)
-      setSelectedGoalId('')
       setSelectedResourceId(null)
       setSelectedResourceLinks([])
+      setKnowledgeGapSummary(null)
     }
   }
 
@@ -720,6 +635,20 @@ export default function App(): ReactElement {
     window.localStorage.setItem('improvement.notes', notes)
     window.localStorage.setItem('improvement.notesSavedAt', savedAt)
     setLastSavedAt(savedAt)
+    if (selectedProjectId) {
+      void loadKnowledgeGaps(selectedProjectId, notes)
+    }
+  }
+
+  const selectPomodoroMode = (mode: PomodoroMode): void => {
+    setPomodoroMode(mode)
+    setPomodoroSeconds(pomodoroDurations[mode])
+    setIsPomodoroRunning(false)
+  }
+
+  const resetPomodoro = (): void => {
+    setPomodoroSeconds(pomodoroDurations[pomodoroMode])
+    setIsPomodoroRunning(false)
   }
 
   const copyMessage = async (message: MentorMessage): Promise<void> => {
@@ -741,7 +670,7 @@ export default function App(): ReactElement {
       setMentorError(null)
       const fallbackResource = event.resource ?? resourceFromTranscriptEvent(event)
       if (selectedProjectId && event.resource) {
-        await window.improvement.linkResourceToProject(event.resource.id, selectedProjectId, selectedGoalId || undefined)
+        await window.improvement.linkResourceToProject(event.resource.id, selectedProjectId)
       }
       await loadCapturedResources(fallbackResource)
       return
@@ -789,6 +718,14 @@ export default function App(): ReactElement {
     )
     await window.improvement.deleteCapturedResource(resourceId, deleteFile)
     await loadCapturedResources()
+    setProjectResourcesByProject((items) =>
+      Object.fromEntries(
+        Object.entries(items).map(([projectId, resources]) => [
+          projectId,
+          resources.filter((resource) => resource.id !== resourceId)
+        ])
+      )
+    )
   }
 
   const openPdfInBrowser = async (resource: CapturedResource): Promise<void> => {
@@ -799,27 +736,28 @@ export default function App(): ReactElement {
     }
   }
 
-  const isSelectedResourceLinkedToProject = Boolean(
-    selectedProjectId && selectedResourceLinks.some((link) => link.projectId === selectedProjectId)
-  )
-
-  const linkSelectedResourceToProject = async (): Promise<void> => {
-    if (!selectedResource || !selectedProjectId) {
+  const linkResourceToProjectFromTree = async (resourceId: string, projectId: string): Promise<void> => {
+    if (!resourceId || !projectId) {
       return
     }
 
-    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, selectedProjectId, selectedGoalId || undefined))
-    await loadProjectResources(selectedProjectId)
+    setSelectedResourceLinks(await window.improvement.linkResourceToProject(resourceId, projectId))
+    setExpandedProjectIds((items) => new Set([...items, projectId]))
+    await selectProject(projectId)
+    await loadProjectResources(projectId)
+    await loadKnowledgeGaps(projectId)
+    setSelectedResourceId(resourceId)
   }
 
-  const linkSelectedResourceToProjectId = async (projectId: string, goalId?: string | null): Promise<void> => {
+  const linkSelectedResourceToProjectId = async (projectId: string): Promise<void> => {
     if (!selectedResource || !projectId) {
       return
     }
 
-    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, projectId, goalId))
+    setSelectedResourceLinks(await window.improvement.linkResourceToProject(selectedResource.id, projectId))
     if (projectId === selectedProjectId) {
       await loadProjectResources(projectId)
+      await loadKnowledgeGaps(projectId)
     }
   }
 
@@ -831,8 +769,9 @@ export default function App(): ReactElement {
     setSelectedResourceLinks(await window.improvement.unlinkResourceFromProject(selectedResource.id, projectId))
     if (selectedProjectId) {
       const resources = await loadProjectResources(selectedProjectId)
+      await loadKnowledgeGaps(selectedProjectId)
       if (!resources.some((resource) => resource.id === selectedResource.id)) {
-        setSelectedResourceId(resources[0]?.id ?? null)
+        setSelectedResourceId(null)
       }
     }
   }
@@ -885,10 +824,14 @@ export default function App(): ReactElement {
     ])
 
     try {
-      await window.improvement.sendMentorMessage(message)
+      await window.improvement.sendMentorMessage(message, notes)
     } catch {
       setMentorError('Unable to send the follow-up message to the main process.')
     }
+  }
+
+  const askAboutKnowledgeGap = (gap: KnowledgeGapRecommendation): void => {
+    setFollowUp(`Help me close this knowledge gap: ${gap.title}. ${gap.recommendation}`)
   }
 
   const browserPanel = (
@@ -1039,10 +982,13 @@ export default function App(): ReactElement {
                 )}
                 <div className="project-tree">
                   {projects.length === 0 ? (
-                    <p className="empty-goals">No projects yet. Use "New Project" above to get started.</p>
+                    <p className="tree-empty">No projects yet. Use "New Project" above to get started.</p>
                   ) : (
                     projects.map((project) => {
-                      const projectGoals = goalsByProject[project.id] ?? []
+                      const projectLinkedResources = projectResourcesByProject[project.id] ?? []
+                      const availableResources = capturedResources.filter(
+                        (resource) => !projectLinkedResources.some((linkedResource) => linkedResource.id === resource.id)
+                      )
                       const expanded = expandedProjectIds.has(project.id)
 
                       return (
@@ -1054,7 +1000,8 @@ export default function App(): ReactElement {
                             <button type="button" className="tree-main" onClick={() => void selectProject(project.id)}>
                               <strong>{project.title}</strong>
                               <span>
-                                {project.type} · {projectGoals.length} {projectGoals.length === 1 ? 'goal' : 'goals'}
+                                {project.type} · {projectLinkedResources.length}{' '}
+                                {projectLinkedResources.length === 1 ? 'resource' : 'resources'}
                               </span>
                             </button>
                             <button
@@ -1070,21 +1017,74 @@ export default function App(): ReactElement {
                             </button>
                           </div>
                           {expanded && (
-                            <div className="goal-tree-list">
-                              {projectGoals.length === 0 ? (
-                                <span className="tree-empty">No goals yet</span>
+                            <div className="project-tree-children">
+                              <span className="tree-section-label">Resources</span>
+                              {projectLinkedResources.length === 0 ? (
+                                <span className="tree-empty">No resources linked yet</span>
                               ) : (
-                                projectGoals.map((goal) => (
-                                  <button
-                                    type="button"
-                                    key={goal.id}
-                                    className={selectedGoalId === goal.id ? 'goal-tree-row active' : 'goal-tree-row'}
-                                    onClick={() => void selectGoalFromNavigation(goal)}
+                                projectLinkedResources.map((resource) => (
+                                  <div
+                                    key={resource.id}
+                                    className={selectedResourceId === resource.id ? 'resource-tree-row active' : 'resource-tree-row'}
                                   >
-                                    <span className={`goal-status ${goal.status}`}>{goalStatusLabel(goal.status)}</span>
-                                    <strong>{goal.title}</strong>
-                                  </button>
+                                    <button
+                                      type="button"
+                                      className="resource-tree-main"
+                                      onClick={() => void selectResourceFromNavigation(project.id, resource.id)}
+                                    >
+                                      <span className="resource-icon">{resourceIcon(resource.type)}</span>
+                                      <span>
+                                        <strong>{resource.title || 'Captured resource'}</strong>
+                                        <small>
+                                          {resource.type} · {resource.source} · {formatResourceDate(resource.capturedAt)}
+                                        </small>
+                                      </span>
+                                    </button>
+                                    {selectedResourceId === resource.id && selectedResource && (
+                                      <div className="resource-tree-actions">
+                                        {resource.type === 'pdf' && (
+                                          <button type="button" onClick={() => void openPdfInBrowser(resource)}>
+                                            Open PDF
+                                          </button>
+                                        )}
+                                        <button type="button" onClick={() => void copyResourceContent(resource)}>
+                                          {copiedResourceId === resource.id
+                                            ? 'Copied'
+                                            : resource.type === 'transcript'
+                                              ? 'Copy full transcript'
+                                              : 'Copy resource'}
+                                        </button>
+                                        <button type="button" onClick={() => void sendResourceToGrok(resource)}>
+                                          Send to Grok
+                                        </button>
+                                        <button type="button" onClick={() => void unlinkSelectedResourceFromProject(project.id)}>
+                                          Remove
+                                        </button>
+                                        <button type="button" onClick={() => void deleteResource(resource.id)}>
+                                          Delete
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 ))
+                              )}
+                              {availableResources.length > 0 && (
+                                <select
+                                  className="resource-attach-select"
+                                  aria-label={`Attach captured resource to ${project.title}`}
+                                  value=""
+                                  onChange={(event) => {
+                                    void linkResourceToProjectFromTree(event.target.value, project.id)
+                                    event.currentTarget.value = ''
+                                  }}
+                                >
+                                  <option value="">Attach captured resource...</option>
+                                  {availableResources.map((resource) => (
+                                    <option key={resource.id} value={resource.id}>
+                                      {resource.title || 'Captured resource'}
+                                    </option>
+                                  ))}
+                                </select>
                               )}
                             </div>
                           )}
@@ -1107,11 +1107,6 @@ export default function App(): ReactElement {
                         {projects.map((project) => (
                           <optgroup key={project.id} label={project.title}>
                             <option value={`project:${project.id}`}>{project.title}</option>
-                            {(goalsByProject[project.id] ?? []).map((goal) => (
-                              <option key={goal.id} value={`goal:${project.id}:${goal.id}`}>
-                                {goal.title}
-                              </option>
-                            ))}
                           </optgroup>
                         ))}
                       </select>
@@ -1147,249 +1142,39 @@ export default function App(): ReactElement {
                 </section>
               )}
 
-              {selectedProject && (
-                <section className="goals-card">
-                  <div className="card-header">
-                    <div>
-                      <h3>Goals</h3>
-                      <span>Pick the next objective and keep project progress visible.</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetGoalForm()
-                        setShowNewGoalForm((value) => !value)
-                      }}
-                    >
-                      {showNewGoalForm ? 'Cancel' : 'New Goal'}
-                    </button>
+              <section className="pomodoro-card" aria-label="Pomodoro timer">
+                <div className="card-header">
+                  <div>
+                    <h3>Pomodoro</h3>
+                    <span>{pomodoroMode === 'focus' ? 'Focus session' : 'Short break'}</span>
                   </div>
-
-                  {learningGoals.length > 0 && (
-                    <label className="project-selector">
-                      <span>Active goal for new resources</span>
-                      <select value={selectedGoalId} onChange={(event) => setSelectedGoalId(event.target.value)}>
-                        <option value="">No active goal</option>
-                        {learningGoals.map((goal) => (
-                          <option key={goal.id} value={goal.id}>
-                            {goal.title}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-
-                  {(showNewGoalForm || editingGoalId) && (
-                    <form className="new-project-form" onSubmit={saveGoal}>
-                      <input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} placeholder="Goal title" />
-                      <textarea
-                        value={goalDescription}
-                        onChange={(event) => setGoalDescription(event.target.value)}
-                        placeholder="What should this goal help you understand or do?"
-                      />
-                      <select value={goalPriority} onChange={(event) => setGoalPriority(Number(event.target.value))}>
-                        <option value={1}>Priority 1</option>
-                        <option value={2}>Priority 2</option>
-                        <option value={3}>Priority 3</option>
-                        <option value={4}>Priority 4</option>
-                        <option value={5}>Priority 5</option>
-                      </select>
-                      <button type="submit" disabled={goalTitle.trim().length === 0}>
-                        {editingGoalId ? 'Save Goal' : 'Create Goal'}
-                      </button>
-                    </form>
-                  )}
-
-                  <div className="goal-list">
-                    {learningGoals.length === 0 ? (
-                      <p className="empty-goals">No goals yet. Add one clear next objective for this project.</p>
-                    ) : (
-                      learningGoals.map((goal) => (
-                        <article key={goal.id} className={selectedGoalId === goal.id ? 'goal-row active' : 'goal-row'}>
-                          <div>
-                            <strong>{goal.title}</strong>
-                            {goal.description && <span>{goal.description}</span>}
-                            <small>Priority {goal.priority}</small>
-                          </div>
-                          <div className="goal-actions">
-                            <span className={`goal-status ${goal.status}`}>{goalStatusLabel(goal.status)}</span>
-                            <select
-                              aria-label={`Change status for ${goal.title}`}
-                              value={goal.status}
-                              onChange={(event) => void updateGoalStatus(goal, event.target.value as LearningGoalStatus)}
-                            >
-                              <option value="todo">Todo</option>
-                              <option value="in-progress">In Progress</option>
-                              <option value="done">Done</option>
-                            </select>
-                            <button type="button" onClick={() => setSelectedGoalId(goal.id)}>
-                              Use
-                            </button>
-                            <button type="button" onClick={() => startEditingGoal(goal)}>
-                              Edit
-                            </button>
-                            <button type="button" onClick={() => void deleteGoal(goal)}>
-                              Delete
-                            </button>
-                          </div>
-                        </article>
-                      ))
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {displayedResources.length > 0 && (
-                <section className="captured-transcripts-card resource-library-card">
-                  <div className="card-header">
-                    <div>
-                      <h3>{isShowingProjectResources ? 'Project resources' : 'Captured resources'}</h3>
-                      <span>
-                        {displayedResources.length} {isShowingProjectResources ? 'linked' : 'saved locally'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="resource-list">
-                    {displayedResources.map((resource) => (
-                      <div
-                        key={resource.id}
-                        className={selectedResource?.id === resource.id ? 'resource-row active' : 'resource-row'}
-                      >
-                        <button
-                          type="button"
-                          className="resource-main"
-                          onClick={() => setSelectedResourceId(resource.id)}
-                        >
-                          <span className="resource-icon">{resourceIcon(resource.type)}</span>
-                          <span>
-                            <strong>{resource.title || 'Captured resource'}</strong>
-                            <small>
-                              {resource.type} · {resource.source} · {formatResourceDate(resource.capturedAt)}
-                            </small>
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="tree-delete"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void deleteResource(resource.id)
-                          }}
-                          title="Delete resource"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedResource && (
-                    <article className="captured-transcript resource-preview">
-                      <div className="message-header resource-preview-header">
-                        <div>
-                          <strong>{selectedResource.title || 'Captured resource'}</strong>
-                          <span>
-                            {selectedResource.type} · {selectedResource.url ? formatHostname(selectedResource.url) : selectedResource.source}
-                          </span>
-                          {selectedResourceLinks.length > 0 && (
-                            <span className="linked-projects">
-                              Linked to{' '}
-                              {selectedResourceLinks
-                                .map((link) =>
-                                  link.learningGoal ? `${link.project.title} / ${link.learningGoal.title}` : link.project.title
-                                )
-                                .join(', ')}
-                            </span>
-                          )}
-                        </div>
-                        <div className="resource-actions">
-                          {!selectedProjectId && projects.length > 0 && (
-                            <select
-                              aria-label="Link selected resource to project"
-                              defaultValue=""
-                              onChange={(event) => {
-                                void linkSelectedResourceToProjectId(event.target.value)
-                                event.currentTarget.value = ''
-                              }}
-                            >
-                              <option value="">Link to project...</option>
-                              {projects.map((project) => (
-                                <option key={project.id} value={project.id}>
-                                  {project.title}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          {selectedProjectId && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                isSelectedResourceLinkedToProject
-                                  ? void unlinkSelectedResourceFromProject(selectedProjectId)
-                                  : void linkSelectedResourceToProject()
-                              }
-                            >
-                              {isSelectedResourceLinkedToProject ? 'Unlink Project' : 'Link to Project'}
-                            </button>
-                          )}
-                          {selectedProjectId && learningGoals.length > 0 && (
-                            <select
-                              aria-label="Link selected resource to goal"
-                              value={selectedResourceLinks.find((link) => link.projectId === selectedProjectId)?.learningGoalId ?? ''}
-                              onChange={(event) =>
-                                void linkSelectedResourceToProjectId(selectedProjectId, event.target.value || null)
-                              }
-                            >
-                              <option value="">No goal link</option>
-                              {learningGoals.map((goal) => (
-                                <option key={goal.id} value={goal.id}>
-                                  {goal.title}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          {selectedResource.type === 'pdf' && (
-                            <button type="button" onClick={() => void openPdfInBrowser(selectedResource)}>
-                              Open PDF in Browser
-                            </button>
-                          )}
-                          {selectedResource.type === 'transcript' && (
-                            <button type="button" onClick={() => setShowTranscriptTimestamps((value) => !value)}>
-                              {showTranscriptTimestamps ? 'Hide timestamps' : 'Show timestamps'}
-                            </button>
-                          )}
-                          <button type="button" onClick={() => void copyResourceContent(selectedResource)}>
-                            {copiedResourceId === selectedResource.id
-                              ? 'Copied'
-                              : selectedResource.type === 'transcript'
-                                ? 'Copy full transcript'
-                                : 'Copy resource'}
-                          </button>
-                          <button type="button" onClick={() => void sendResourceToGrok(selectedResource)}>
-                            Send to Grok
-                          </button>
-                          <button type="button" onClick={() => void deleteResource(selectedResource.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                      {selectedProject && isSelectedResourceLinkedToProject && (
-                        <button
-                          type="button"
-                          className="unlink-project-resource"
-                          onClick={() => void unlinkSelectedResourceFromProject(selectedProject.id)}
-                        >
-                          Remove from {selectedProject.title}
-                        </button>
-                      )}
-                      {selectedResource.type === 'transcript' ? (
-                        <TranscriptResourcePreview resource={selectedResource} showTimestamps={showTranscriptTimestamps} />
-                      ) : (
-                        <pre>{selectedResource.content}</pre>
-                      )}
-                    </article>
-                  )}
-                </section>
-              )}
+                </div>
+                <div className="pomodoro-display" aria-live="polite">{pomodoroTime}</div>
+                <div className="pomodoro-mode-switch" aria-label="Pomodoro mode">
+                  <button
+                    type="button"
+                    className={pomodoroMode === 'focus' ? 'active' : ''}
+                    onClick={() => selectPomodoroMode('focus')}
+                  >
+                    Focus
+                  </button>
+                  <button
+                    type="button"
+                    className={pomodoroMode === 'break' ? 'active' : ''}
+                    onClick={() => selectPomodoroMode('break')}
+                  >
+                    Break
+                  </button>
+                </div>
+                <div className="pomodoro-actions">
+                  <button type="button" onClick={() => setIsPomodoroRunning((running) => !running)}>
+                    {isPomodoroRunning ? 'Pause' : 'Start'}
+                  </button>
+                  <button type="button" onClick={resetPomodoro}>
+                    Reset
+                  </button>
+                </div>
+              </section>
 
               <section className="notes-card">
                 <div className="card-header">
@@ -1407,6 +1192,47 @@ export default function App(): ReactElement {
                   onChange={(event) => setNotes(event.target.value)}
                   placeholder="Write your takeaways, open questions, formulas, build notes, or ideas to revisit..."
                 />
+              </section>
+
+              <section className="knowledge-gap-card" aria-label="Knowledge gaps">
+                <div className="card-header">
+                  <div>
+                    <h3>Recommended next</h3>
+                    <span>
+                      {selectedProject
+                        ? `${selectedProject.title} · ${selectedKnowledgeGapSummary?.resourceCount ?? 0} linked ${selectedKnowledgeGapSummary?.resourceCount === 1 ? 'resource' : 'resources'}`
+                        : 'Select a project'}
+                    </span>
+                  </div>
+                  <button type="button" disabled={!selectedProject || isLoadingKnowledgeGaps} onClick={() => void loadKnowledgeGaps(selectedProjectId)}>
+                    Refresh
+                  </button>
+                </div>
+                {!selectedProject ? (
+                  <p className="knowledge-gap-empty">Choose a project to see the next useful gaps.</p>
+                ) : isLoadingKnowledgeGaps ? (
+                  <p className="knowledge-gap-empty">Analyzing project coverage...</p>
+                ) : selectedKnowledgeGaps.length === 0 ? (
+                  <p className="knowledge-gap-empty">No obvious gaps detected for this project right now.</p>
+                ) : (
+                  <div className="knowledge-gap-list">
+                    {selectedKnowledgeGaps.map((gap) => (
+                      <article key={gap.id} className={`knowledge-gap-item severity-${gap.severity}`}>
+                        <div>
+                          <strong>{gap.title}</strong>
+                          <span>{gap.description}</span>
+                        </div>
+                        <p>{gap.recommendation}</p>
+                        <div className="knowledge-gap-footer">
+                          <span>Severity {gap.severity}</span>
+                          <button type="button" onClick={() => askAboutKnowledgeGap(gap)}>
+                            Ask Grok
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="learning-actions-card">

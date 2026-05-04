@@ -2,8 +2,9 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { CapturedSelection, MentorStreamEvent, RendererApi, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
-import type { LearningGoal, LearningGoalInput, LearningGoalUpdate, Project, ProjectInput, ProjectProgress, ProjectResourceLink } from '../../shared/projects'
+import type { CapturedSelection, MentorStreamEvent, RendererApi, ResourceImportedEvent, TabsSnapshot, TranscriptCaptureEvent } from '../../shared/ipc'
+import type { ProjectKnowledgeGapSummary } from '../../shared/knowledgeGaps'
+import type { Project, ProjectInput, ProjectResourceLink } from '../../shared/projects'
 import type { CapturedResource } from '../../shared/resources'
 
 const tabsSnapshot: TabsSnapshot = {
@@ -34,6 +35,8 @@ interface ImprovementMock {
   emitSelectionCaptured: (selection: CapturedSelection) => void
   emitTranscriptCapture: (event: TranscriptCaptureEvent) => void
   emitMentorStream: (event: MentorStreamEvent) => void
+  emitResourceImported: (event: ResourceImportedEvent) => void
+  addResource: (resource: CapturedResource) => void
 }
 
 function installImprovementMock(initialResources: CapturedResource[] = []): ImprovementMock {
@@ -41,20 +44,54 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
   let selectionCaptured: ((selection: CapturedSelection) => void) | null = null
   let transcriptCapture: ((event: TranscriptCaptureEvent) => void) | null = null
   let mentorStream: ((event: MentorStreamEvent) => void) | null = null
+  let resourceImported: ((event: ResourceImportedEvent) => void) | null = null
   const resources: CapturedResource[] = [...initialResources]
   const projects: Project[] = []
-  const goals: LearningGoal[] = []
   const links: ProjectResourceLink[] = []
 
-  const progressForProject = (projectId: string): ProjectProgress => {
-    const projectGoals = goals.filter((goal) => goal.projectId === projectId)
-    const completedGoals = projectGoals.filter((goal) => goal.status === 'done').length
+  const knowledgeGapSummary = (projectId: string): ProjectKnowledgeGapSummary | null => {
+    const project = projects.find((item) => item.id === projectId)
+    if (!project) {
+      return null
+    }
+
+    const linkedResources = resources.filter((resource) =>
+      links.some((link) => link.projectId === projectId && link.resourceId === resource.id)
+    )
 
     return {
       projectId,
-      totalGoals: projectGoals.length,
-      completedGoals,
-      percentComplete: projectGoals.length === 0 ? 0 : Math.round((completedGoals / projectGoals.length) * 100)
+      projectTitle: project.title,
+      generatedAt: '2026-05-04T12:00:00.000Z',
+      resourceCount: linkedResources.length,
+      noteSignalCount: 0,
+      coveredTopics: linkedResources.map((resource) => resource.title),
+      gaps:
+        linkedResources.length === 0
+          ? [
+              {
+                id: `${projectId}:link-first-source`,
+                projectId,
+                title: 'Link one strong source',
+                description: 'No captured resources are linked to this project yet.',
+                recommendation: 'Import a PDF, capture a transcript, or attach an existing resource before asking for a roadmap.',
+                status: 'open',
+                severity: 3,
+                detectedBy: 'heuristic',
+                evidence: [
+                  {
+                    type: 'project',
+                    id: projectId,
+                    title: project.title,
+                    detail: 'Project has zero linked resources.'
+                  }
+                ],
+                createdAt: '2026-05-04T12:00:00.000Z',
+                updatedAt: '2026-05-04T12:00:00.000Z',
+                metadata: { resourceCount: 0 }
+              }
+            ]
+          : []
     }
   }
 
@@ -93,9 +130,9 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
     }),
     updateProject: vi.fn().mockResolvedValue(null),
     deleteProject: vi.fn().mockImplementation((id: string, _deleteAssociatedResources = false) => Promise.resolve()),
-    linkResourceToProject: vi.fn().mockImplementation((resourceId: string, projectId: string, learningGoalId?: string | null) => {
+    setActiveProjectContext: vi.fn(),
+    linkResourceToProject: vi.fn().mockImplementation((resourceId: string, projectId: string) => {
       const existing = links.find((link) => link.resourceId === resourceId && link.projectId === projectId)
-      const learningGoal = learningGoalId ? goals.find((goal) => goal.id === learningGoalId) : undefined
       if (!existing) {
         const project = projects.find((item) => item.id === projectId)
         if (project) {
@@ -103,17 +140,12 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
             id: `link-${links.length + 1}`,
             resourceId,
             projectId,
-            learningGoalId: learningGoal?.id,
             linkedAt: '2026-04-26T12:00:00.000Z',
             notes: '',
             relevanceScore: 1,
-            project,
-            learningGoal
+            project
           })
         }
-      } else {
-        existing.learningGoalId = learningGoal?.id
-        existing.learningGoal = learningGoal
       }
       return Promise.resolve(links.filter((link) => link.resourceId === resourceId))
     }),
@@ -130,54 +162,7 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
     getProjectResources: vi.fn().mockImplementation((projectId: string) =>
       Promise.resolve(resources.filter((resource) => links.some((link) => link.projectId === projectId && link.resourceId === resource.id)))
     ),
-    getLearningGoals: vi.fn().mockImplementation((projectId: string) =>
-      Promise.resolve(goals.filter((goal) => goal.projectId === projectId))
-    ),
-    createLearningGoal: vi.fn().mockImplementation((input: LearningGoalInput) => {
-      const goal: LearningGoal = {
-        id: `goal-${goals.length + 1}`,
-        projectId: input.projectId,
-        title: input.title,
-        description: input.description,
-        status: input.status ?? 'todo',
-        priority: input.priority,
-        createdAt: input.createdAt ?? '2026-04-26T12:00:00.000Z',
-        completedAt: input.completedAt,
-        notes: input.notes
-      }
-      goals.push(goal)
-      return Promise.resolve(goal)
-    }),
-    updateLearningGoal: vi.fn().mockImplementation((update: LearningGoalUpdate) => {
-      const goal = goals.find((item) => item.id === update.id)
-      if (!goal) {
-        return Promise.resolve(null)
-      }
-      Object.assign(goal, update)
-      if (update.status === 'done' && !goal.completedAt) {
-        goal.completedAt = '2026-04-26T13:00:00.000Z'
-      }
-      if (update.status && update.status !== 'done') {
-        goal.completedAt = undefined
-      }
-      return Promise.resolve(goal)
-    }),
-    deleteLearningGoal: vi.fn().mockImplementation((id: string) => {
-      const index = goals.findIndex((goal) => goal.id === id)
-      if (index >= 0) {
-        goals.splice(index, 1)
-      }
-      return Promise.resolve()
-    }),
-    markLearningGoalComplete: vi.fn().mockImplementation((id: string) => {
-      const goal = goals.find((item) => item.id === id)
-      if (goal) {
-        goal.status = 'done'
-        goal.completedAt = '2026-04-26T13:00:00.000Z'
-      }
-      return Promise.resolve(goal ?? null)
-    }),
-    getProjectProgress: vi.fn().mockImplementation((projectId: string) => Promise.resolve(progressForProject(projectId))),
+    getProjectKnowledgeGaps: vi.fn().mockImplementation((projectId: string) => Promise.resolve(knowledgeGapSummary(projectId))),
     importPdfResource: vi.fn().mockResolvedValue(null),
     openPdfResource: vi.fn().mockResolvedValue(tabsSnapshot),
     getXaiStatus: vi.fn().mockResolvedValue({
@@ -190,14 +175,30 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
       source: 'temporary',
       model: 'grok-4'
     }),
-    captureTranscript: vi.fn().mockResolvedValue({
-      type: 'captured',
-      capturedAt: '2026-04-26T12:00:00.000Z',
-      capture: {
+    captureTranscript: vi.fn().mockImplementation(() => {
+      const resource: CapturedResource = {
+        id: `resource-${resources.length + 1}`,
+        type: 'transcript',
+        source: 'youtube.com',
         title: 'Chassis Setup Explained',
         url: 'https://www.youtube.com/watch?v=abc123',
-        text: 'Transcript line one.\nTranscript line two.'
+        content: 'Transcript line one.\nTranscript line two.',
+        capturedAt: '2026-04-26T12:00:00.000Z',
+        metadata: { capturedFrom: 'manual-transcript-capture' },
+        tags: ['transcript']
       }
+      resources.unshift(resource)
+
+      return Promise.resolve({
+        type: 'captured',
+        capturedAt: resource.capturedAt,
+        capture: {
+          title: resource.title,
+          url: resource.url ?? '',
+          text: resource.content
+        },
+        resource
+      })
     }),
     sendCaptureToMentor: vi.fn().mockResolvedValue(undefined),
     sendMentorMessage: vi.fn().mockResolvedValue(undefined),
@@ -216,6 +217,10 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
     onMentorStream: vi.fn((callback) => {
       mentorStream = callback
       return vi.fn()
+    }),
+    onResourceImported: vi.fn((callback) => {
+      resourceImported = callback
+      return vi.fn()
     })
   }
 
@@ -229,7 +234,9 @@ function installImprovementMock(initialResources: CapturedResource[] = []): Impr
     emitTabsChanged: (snapshot) => tabsChanged?.(snapshot),
     emitSelectionCaptured: (selection) => selectionCaptured?.(selection),
     emitTranscriptCapture: (event) => transcriptCapture?.(event),
-    emitMentorStream: (event) => mentorStream?.(event)
+    emitMentorStream: (event) => mentorStream?.(event),
+    emitResourceImported: (event) => resourceImported?.(event),
+    addResource: (resource) => resources.unshift(resource)
   }
 }
 
@@ -299,6 +306,10 @@ describe('App', () => {
 
     render(<App />)
 
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Chassis Study')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
     expect(screen.queryByRole('button', { name: 'Capture Transcript' })).not.toBeInTheDocument()
 
     act(() =>
@@ -321,8 +332,8 @@ describe('App', () => {
 
     expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
     expect(screen.getAllByText(/Chassis Setup Explained/).length).toBeGreaterThan(0)
-    expect(screen.getByText('Transcript line one. Transcript line two.')).toBeInTheDocument()
     expect(api.captureTranscript).toHaveBeenCalled()
+    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1')
     expect(api.sendCaptureToMentor).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Send to Grok' }))
@@ -407,10 +418,49 @@ describe('App', () => {
 
     expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
     expect(screen.getAllByText(/EFI Tuning Fundamentals/).length).toBeGreaterThan(0)
-    expect(screen.getByText('Welcome to this lesson. We are going to tune the fuel table.')).toBeInTheDocument()
+    expect(api.captureTranscript).toHaveBeenCalled()
   })
 
-  it('renders captured transcripts as clean readable text with optional timestamps', async () => {
+  it('shows transcript capture controls on Udemy lecture pages', async () => {
+    const user = userEvent.setup()
+    const { api, emitTabsChanged } = installImprovementMock()
+
+    vi.mocked(api.captureTranscript).mockResolvedValueOnce({
+      type: 'captured',
+      capturedAt: '2026-04-26T12:00:00.000Z',
+      capture: {
+        title: 'Fusion 360 Fundamentals',
+        url: 'https://www.udemy.com/course/fusion-360/learn/lecture/123456',
+        text: 'Welcome back to the course.\nIn this lesson we will sketch constraints.'
+      }
+    })
+
+    render(<App />)
+
+    act(() =>
+      emitTabsChanged({
+        activeTabId: 'udemy-tab',
+        tabs: [
+          {
+            id: 'udemy-tab',
+            title: 'Fusion 360 Fundamentals',
+            url: 'https://www.udemy.com/course/fusion-360/learn/lecture/123456',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false
+          }
+        ]
+      })
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Capture Transcript' }))
+
+    expect(await screen.findByText('Transcript captured')).toBeInTheDocument()
+    expect(screen.getAllByText(/Fusion 360 Fundamentals/).length).toBeGreaterThan(0)
+    expect(api.captureTranscript).toHaveBeenCalled()
+  })
+
+  it('shows linked captured resources in the project tree and copies transcript text', async () => {
     const user = userEvent.setup()
     const writeText = vi.fn().mockResolvedValue(undefined)
 
@@ -436,19 +486,13 @@ describe('App', () => {
 
     render(<App />)
 
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Brake System Study')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
+    await user.selectOptions(await screen.findByLabelText('Attach captured resource to Brake System Study'), 'resource-1')
     expect((await screen.findAllByText('Brake Bias Explained')).length).toBeGreaterThan(0)
-    expect(
-      screen.getByText(
-        "One of the terms that's often thrown around is brake bias. This would easily be one of the most misused terms in setup discussions."
-      )
-    ).toBeInTheDocument()
-    expect(screen.queryByText('00:00')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Show timestamps' }))
-
-    expect(screen.getByText('00:00')).toBeInTheDocument()
-    expect(screen.getByText('00:09')).toBeInTheDocument()
-
+    expect(screen.queryByRole('heading', { name: 'Captured resources' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Copy full transcript' }))
 
     expect(writeText).toHaveBeenCalledWith(
@@ -478,8 +522,13 @@ describe('App', () => {
 
     render(<App />)
 
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Vehicle Dynamics Study')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
+    await user.selectOptions(await screen.findByLabelText('Attach captured resource to Vehicle Dynamics Study'), 'pdf-1')
     expect((await screen.findAllByText('Vehicle Dynamics Notes')).length).toBeGreaterThan(0)
-    await user.click(screen.getByRole('button', { name: 'Open PDF in Browser' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF' }))
 
     expect(api.openPdfResource).toHaveBeenCalledWith('pdf-1')
   })
@@ -501,61 +550,70 @@ describe('App', () => {
 
     render(<App />)
 
-    expect((await screen.findAllByText('Chassis Stiffness Notes')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'New Project' }))
     await user.type(screen.getByPlaceholderText('Project title'), 'Spec Miata Build')
     await user.type(screen.getByPlaceholderText('Description (optional)'), 'Organize chassis and engine resources.')
     await user.selectOptions(screen.getByDisplayValue('General'), 'build')
     await user.click(screen.getByRole('button', { name: 'Create Project' }))
 
-    await user.click(await screen.findByRole('button', { name: 'Link to Project' }))
+    await user.selectOptions(await screen.findByLabelText('Attach captured resource to Spec Miata Build'), 'resource-1')
 
-    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', undefined)
-    expect(await screen.findByText('Linked to Spec Miata Build')).toBeInTheDocument()
-
-    expect(await screen.findByText('1 linked')).toBeInTheDocument()
+    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1')
+    expect((await screen.findAllByText('Chassis Stiffness Notes')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/1 resource/)).length).toBeGreaterThan(0)
   })
 
-  it('creates learning goals, updates progress, and links resources to goals', async () => {
+  it('shows knowledge gap recommendations for the selected project', async () => {
     const user = userEvent.setup()
-    const { api } = installImprovementMock([
-      {
-        id: 'resource-1',
-        type: 'pdf',
-        source: 'file-upload',
-        title: 'Bearing Clearance Notes',
-        content: 'Measure clearance with plastigage and micrometers.',
-        capturedAt: '2026-04-26T12:00:00.000Z',
-        metadata: {},
-        tags: ['pdf']
-      }
-    ])
+    const { api } = installImprovementMock()
 
     render(<App />)
 
-    expect((await screen.findAllByText('Bearing Clearance Notes')).length).toBeGreaterThan(0)
     await user.click(screen.getByRole('button', { name: 'New Project' }))
-    await user.type(screen.getByPlaceholderText('Project title'), 'Engine Course')
+    await user.type(screen.getByPlaceholderText('Project title'), 'Chassis Roadmap')
     await user.click(screen.getByRole('button', { name: 'Create Project' }))
 
-    await user.click(await screen.findByRole('button', { name: 'New Goal' }))
-    await user.type(screen.getByPlaceholderText('Goal title'), 'Understand bearing clearance')
-    await user.type(screen.getByPlaceholderText('What should this goal help you understand or do?'), 'Learn measurement process.')
-    await user.selectOptions(screen.getByDisplayValue('Priority 3'), '5')
-    await user.click(screen.getByRole('button', { name: 'Create Goal' }))
-
-    expect((await screen.findAllByText('Understand bearing clearance')).length).toBeGreaterThan(0)
-    // Progress text removed in streamlined UI cleanup; backend progress tracking remains
-
-    await user.selectOptions(screen.getByLabelText('Change status for Understand bearing clearance'), 'done')
-
-    await user.click(await screen.findByRole('button', { name: 'Link to Project' }))
-
-    expect(api.linkResourceToProject).toHaveBeenCalledWith('resource-1', 'project-1', 'goal-1')
-    expect(await screen.findByText('Linked to Engine Course / Understand bearing clearance')).toBeInTheDocument()
+    expect(await screen.findByText('Link one strong source')).toBeInTheDocument()
+    expect(screen.getByText('Import a PDF, capture a transcript, or attach an existing resource before asking for a roadmap.')).toBeInTheDocument()
+    expect(api.getProjectKnowledgeGaps).toHaveBeenCalledWith('project-1', '')
   })
 
-  it('shows project goals in the left tree and assigns schedule blocks', async () => {
+  it('syncs active project context and refreshes PDF imports from the browser New Tab page', async () => {
+    const user = userEvent.setup()
+    const { api, addResource, emitResourceImported } = installImprovementMock()
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'New Project' }))
+    await user.type(screen.getByPlaceholderText('Project title'), 'Vehicle Dynamics Study')
+    await user.click(screen.getByRole('button', { name: 'Create Project' }))
+
+    await waitFor(() => expect(api.setActiveProjectContext).toHaveBeenCalledWith('project-1'))
+
+    const pdfResource: CapturedResource = {
+      id: 'pdf-1',
+      type: 'pdf',
+      source: 'file-upload',
+      title: 'Vehicle Dynamics Notes',
+      url: 'file:///Users/david/Library/Application%20Support/Improvement/pdfs/vehicle-dynamics.pdf',
+      content: 'Extracted PDF text about load transfer.',
+      capturedAt: '2026-05-04T12:00:00.000Z',
+      metadata: {
+        filePath: '/Users/david/Library/Application Support/Improvement/pdfs/vehicle-dynamics.pdf'
+      },
+      tags: ['pdf']
+    }
+
+    addResource(pdfResource)
+    await api.linkResourceToProject('pdf-1', 'project-1')
+
+    act(() => emitResourceImported({ resource: pdfResource, linkedProjectId: 'project-1' }))
+
+    expect((await screen.findAllByText('Vehicle Dynamics Notes')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/1 resource/)).length).toBeGreaterThan(0)
+  })
+
+  it('assigns schedule blocks to projects', async () => {
     const user = userEvent.setup()
     installImprovementMock()
 
@@ -566,18 +624,13 @@ describe('App', () => {
     await user.type(screen.getByPlaceholderText('Project title'), 'Engine Course')
     await user.click(screen.getByRole('button', { name: 'Create Project' }))
 
-    await user.click(await screen.findByRole('button', { name: 'New Goal' }))
-    await user.type(screen.getByPlaceholderText('Goal title'), 'Understand bearing clearance')
-    await user.click(screen.getByRole('button', { name: 'Create Goal' }))
-
     expect((await screen.findAllByText('Engine Course')).length).toBeGreaterThan(0)
-    expect((await screen.findAllByText('Understand bearing clearance')).length).toBeGreaterThan(0)
 
     await user.click(screen.getAllByRole('button', { name: 'Schedule' })[0])
     expect(screen.getByText('Today')).toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText(/8:00-9:00/), 'goal:project-1:goal-1')
+    await user.selectOptions(screen.getByLabelText(/8:00-9:00/), 'project:project-1')
 
-    expect(screen.getByLabelText(/8:00-9:00/)).toHaveValue('goal:project-1:goal-1')
+    expect(screen.getByLabelText(/8:00-9:00/)).toHaveValue('project:project-1')
   })
 
   it('saves session notes to local storage', async () => {
@@ -592,6 +645,26 @@ describe('App', () => {
     expect(window.localStorage.getItem('improvement.notes')).toBe('Remember to review roll center notes.')
     expect(window.localStorage.getItem('improvement.notesSavedAt')).toBeTruthy()
     expect(screen.getByText(/Saved/)).toBeInTheDocument()
+  })
+
+  it('provides pomodoro timer controls in the learning pane', async () => {
+    const user = userEvent.setup()
+    installImprovementMock()
+
+    render(<App />)
+
+    const timer = screen.getByLabelText('Pomodoro timer')
+    expect(timer).toHaveTextContent('25:00')
+
+    await user.click(screen.getByRole('button', { name: 'Break' }))
+    expect(timer).toHaveTextContent('05:00')
+
+    await user.click(screen.getByRole('button', { name: 'Start' }))
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(timer).toHaveTextContent('05:00')
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
   })
 
   it('provides learning cell prompt starters', async () => {

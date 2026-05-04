@@ -99,6 +99,38 @@ describe('ResourceRepository', () => {
     ])
   })
 
+  it('finds relevant resources scoped to specific resource ids', async () => {
+    await repository.save(
+      transcript({
+        id: 'resource-1',
+        title: 'Brake Bias Fundamentals',
+        content: 'Brake bias changes how braking force is distributed between front and rear tires.'
+      })
+    )
+    await repository.save(
+      transcript({
+        id: 'resource-2',
+        title: 'Brake Cooling Notes',
+        content: 'Brake ducts, rotor temperature, and airflow management.'
+      })
+    )
+    await repository.save(
+      transcript({
+        id: 'resource-3',
+        title: 'Welding Reference',
+        content: 'MIG welding settings for thin sheet metal and fabrication practice.'
+      })
+    )
+
+    await expect(repository.searchRelevantByIds('brake', ['resource-2', 'resource-3'], 5)).resolves.toMatchObject([
+      {
+        id: 'resource-2',
+        title: 'Brake Cooling Notes'
+      }
+    ])
+    await expect(repository.searchRelevantByIds('brake', [], 5)).resolves.toHaveLength(0)
+  })
+
   it('keeps FTS5 index synchronized on update and delete', async () => {
     await repository.save(transcript({ content: 'Initial note about anti-roll bars.' }))
     await expect(repository.searchRelevant('anti-roll')).resolves.toHaveLength(1)

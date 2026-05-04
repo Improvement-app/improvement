@@ -117,6 +117,37 @@ export class ResourceRepository {
     }
   }
 
+  async searchRelevantByIds(query: string, resourceIds: string[], limit = 5): Promise<CapturedResource[]> {
+    const ftsQuery = this.toFtsQuery(query)
+    const ids = Array.from(new Set(resourceIds.map((id) => id.trim()).filter(Boolean)))
+
+    if (!ftsQuery || ids.length === 0) {
+      return []
+    }
+
+    const idParams = Object.fromEntries(ids.map((id, index) => [`id${index}`, id]))
+    const idPlaceholders = ids.map((_id, index) => `@id${index}`).join(', ')
+
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT resources.*
+           FROM resources_fts
+           JOIN resources ON resources.rowid = resources_fts.rowid
+           WHERE resources_fts MATCH @query
+             AND resources.id IN (${idPlaceholders})
+           ORDER BY bm25(resources_fts, 5.0, 1.0)
+           LIMIT @limit`
+        )
+        .all({ query: ftsQuery, limit: Math.max(1, Math.min(limit, 20)), ...idParams }) as ResourceRow[]
+
+      return rows.map((row) => this.fromRow(row))
+    } catch (error) {
+      console.warn('Unable to search scoped captured resources with FTS5:', error)
+      return []
+    }
+  }
+
   async delete(id: string): Promise<void> {
     this.db.prepare('DELETE FROM resources WHERE id = ?').run(id)
   }

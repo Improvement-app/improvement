@@ -1,14 +1,6 @@
 import type { CapturedResource } from './resources'
-import type {
-  LearningGoal,
-  LearningGoalInput,
-  LearningGoalUpdate,
-  Project,
-  ProjectInput,
-  ProjectProgress,
-  ProjectResourceLink,
-  ProjectUpdate
-} from './projects'
+import type { ProjectKnowledgeGapSummary } from './knowledgeGaps'
+import type { Project, ProjectInput, ProjectResourceLink, ProjectUpdate } from './projects'
 
 export type TabId = string
 
@@ -88,6 +80,11 @@ export type MentorStreamEvent =
   | { type: 'error'; id?: string; error: string }
   | { type: 'context'; status: 'searching' | 'ready'; resources: RagResourceReference[] }
 
+export interface ResourceImportedEvent {
+  resource: CapturedResource
+  linkedProjectId?: string
+}
+
 export interface RendererApi {
   createTab: (url?: string) => Promise<TabsSnapshot>
   closeTab: (tabId: TabId) => Promise<TabsSnapshot>
@@ -104,27 +101,24 @@ export interface RendererApi {
   createProject: (project: ProjectInput) => Promise<Project>
   updateProject: (project: ProjectUpdate) => Promise<Project | null>
   deleteProject: (id: string, deleteAssociatedResources?: boolean) => Promise<void>
-  linkResourceToProject: (resourceId: string, projectId: string, learningGoalId?: string | null) => Promise<ProjectResourceLink[]>
+  setActiveProjectContext: (projectId: string | null) => void
+  linkResourceToProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
   unlinkResourceFromProject: (resourceId: string, projectId: string) => Promise<ProjectResourceLink[]>
   getResourceProjectLinks: (resourceId: string) => Promise<ProjectResourceLink[]>
   getProjectResources: (projectId: string) => Promise<CapturedResource[]>
-  getLearningGoals: (projectId: string) => Promise<LearningGoal[]>
-  createLearningGoal: (goal: LearningGoalInput) => Promise<LearningGoal>
-  updateLearningGoal: (goal: LearningGoalUpdate) => Promise<LearningGoal | null>
-  deleteLearningGoal: (id: string) => Promise<void>
-  markLearningGoalComplete: (id: string) => Promise<LearningGoal | null>
-  getProjectProgress: (projectId: string) => Promise<ProjectProgress>
+  getProjectKnowledgeGaps: (projectId: string, sessionNotes?: string) => Promise<ProjectKnowledgeGapSummary | null>
   importPdfResource: () => Promise<CapturedResource | null>
   openPdfResource: (id: string) => Promise<TabsSnapshot>
   getXaiStatus: () => Promise<XaiStatus>
   setTemporaryXaiApiKey: (apiKey: string) => Promise<XaiStatus>
   captureTranscript: () => Promise<TranscriptCaptureEvent>
   sendCaptureToMentor: (capture: CapturedSelection) => Promise<void>
-  sendMentorMessage: (message: string) => Promise<void>
+  sendMentorMessage: (message: string, sessionNotes?: string) => Promise<void>
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => () => void
   onSelectionCaptured: (callback: (selection: CapturedSelection) => void) => () => void
   onTranscriptCapture: (callback: (event: TranscriptCaptureEvent) => void) => () => void
   onMentorStream: (callback: (event: MentorStreamEvent) => void) => () => void
+  onResourceImported: (callback: (event: ResourceImportedEvent) => void) => () => void
 }
 
 export const ipcChannels = {
@@ -143,17 +137,14 @@ export const ipcChannels = {
   createProject: 'projects:create',
   updateProject: 'projects:update',
   deleteProject: 'projects:delete',
+  setActiveProjectContext: 'projects:set-active-context',
   linkResourceToProject: 'projects:link-resource',
   unlinkResourceFromProject: 'projects:unlink-resource',
   getResourceProjectLinks: 'projects:get-resource-links',
   getProjectResources: 'projects:get-resources',
-  getLearningGoals: 'goals:get-by-project',
-  createLearningGoal: 'goals:create',
-  updateLearningGoal: 'goals:update',
-  deleteLearningGoal: 'goals:delete',
-  markLearningGoalComplete: 'goals:mark-complete',
-  getProjectProgress: 'goals:get-project-progress',
+  getProjectKnowledgeGaps: 'projects:get-knowledge-gaps',
   importPdfResource: 'resources:import-pdf',
+  resourceImported: 'resources:imported',
   openPdfResource: 'resources:open-pdf',
   tabsChanged: 'tabs:changed',
   selectionCaptured: 'selection:captured',

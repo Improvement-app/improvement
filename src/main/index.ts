@@ -10,13 +10,15 @@ import type {
   MentorMessage,
   MentorStreamEvent,
   RagResourceReference,
+  ResourceImportedEvent,
   TabId,
   TabsSnapshot,
   TranscriptCaptureEvent,
   XaiStatus
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import type { LearningGoalInput, LearningGoalUpdate, ProjectInput, ProjectUpdate } from '../shared/projects'
+import type { ProjectKnowledgeGapSummary } from '../shared/knowledgeGaps'
+import type { ProjectInput, ProjectUpdate } from '../shared/projects'
 import type { CapturedResource } from '../shared/resources'
 import {
   createPersistedTabState,
@@ -24,12 +26,15 @@ import {
   writePersistedTabState,
   type PersistedTabState
 } from './tabPersistence'
+import { searchProjectAwareResources } from './mentor/projectAwareRag'
+import { analyzeProjectKnowledgeGaps } from './mentor/knowledgeGaps'
+import { createNewTabScript } from './newTabPage'
+import { linkResourceToActiveProject } from './projects/activeProjectImportLink'
 import { importPdfResource } from './resources/pdf/PdfImporter'
 import { getTranscriptExtractor } from './transcript'
 
 type ResourceRepositoryInstance = import('./resources/ResourceRepository').ResourceRepository
 type ProjectRepositoryInstance = import('./projects/ProjectRepository').ProjectRepository
-type LearningGoalRepositoryInstance = import('./projects/LearningGoalRepository').LearningGoalRepository
 
 const NEW_TAB_URL = 'improvement://new-tab'
 const XAI_BASE_URL = 'https://api.x.ai/v1'
@@ -60,7 +65,7 @@ let isQuitting = false
 let hasSavedTabsForQuit = false
 let resourceRepository: ResourceRepositoryInstance | null = null
 let projectRepository: ProjectRepositoryInstance | null = null
-let learningGoalRepository: LearningGoalRepositoryInstance | null = null
+let activeProjectId: string | null = null
 const tabs = new Map<TabId, ManagedTab>()
 
 interface XaiChatMessage {
@@ -284,7 +289,7 @@ function createNewTabHtml(): string {
         <p class="import-hint">
           Upload technical PDFs, manuals, research papers or textbooks.<br>
           They will be text-extracted, saved locally, opened in a new browser tab,<br>
-          and automatically linked to your active project or learning goal if one is selected.
+          and automatically linked to your active project if one is selected.
         </p>
       </div>
 
@@ -301,42 +306,7 @@ function createNewTabHtml(): string {
       </section>
     </main>
     <script>
-      document.getElementById('search-form').addEventListener('submit', (event) => {
-        event.preventDefault();
-        const query = document.getElementById('search-input').value.trim();
-        if (query) {
-          window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
-        }
-      });
-
-      // Handle PDF import from New Tab page
-      const importBtn = document.getElementById('import-pdf-btn') as HTMLButtonElement | null
-      if (importBtn) {
-        importBtn.addEventListener('click', async () => {
-          if (!window.improvement?.importPdfResource) {
-            alert('PDF import functionality is not available in this browser context.')
-            return
-          }
-
-          const originalText = importBtn.textContent
-          importBtn.textContent = 'Importing PDF...'
-          importBtn.disabled = true
-
-          try {
-            const resource = await window.improvement.importPdfResource()
-            if (resource?.title) {
-              console.log('✅ PDF imported and opened in new tab:', resource.title)
-              // Note: PDF tab opens automatically via main process; linking happens if project context active
-            }
-          } catch (error) {
-            console.error('PDF import error:', error)
-            alert('Sorry, could not import the PDF. Make sure it is a valid PDF file.')
-          } finally {
-            importBtn.textContent = originalText
-            importBtn.disabled = false
-          }
-        })
-      }
+${createNewTabScript()}
     </script>
   </body>
 </html>`
@@ -445,16 +415,6 @@ async function initializeProjectRepository(): Promise<void> {
   }
 }
 
-async function initializeLearningGoalRepository(): Promise<void> {
-  try {
-    const { LearningGoalRepository } = await import('./projects/LearningGoalRepository')
-    learningGoalRepository = new LearningGoalRepository(app.getPath('userData'))
-  } catch (error) {
-    console.warn('Learning goal storage is disabled because SQLite failed to initialize:', error)
-    learningGoalRepository = null
-  }
-}
-
 async function importPdf(): Promise<CapturedResource | null> {
   if (!mainWindow) {
     return null
@@ -476,7 +436,16 @@ async function importPdf(): Promise<CapturedResource | null> {
 
   const resource = await importPdfResource(result.filePaths[0], app.getPath('userData'))
   await resourceRepository.save(resource)
+  const linkedProjectId = await linkResourceToActiveProject(resource.id, activeProjectId, projectRepository).catch((error) => {
+    console.warn('Could not link imported PDF to the active project:', error)
+    return undefined
+  })
   createTab(resource.url)
+  const event: ResourceImportedEvent = {
+    resource,
+    linkedProjectId
+  }
+  mainWindow?.webContents.send(ipcChannels.resourceImported, event)
 
   return resource
 }
@@ -487,14 +456,6 @@ function ensureProjectRepository(): ProjectRepositoryInstance {
   }
 
   return projectRepository
-}
-
-function ensureLearningGoalRepository(): LearningGoalRepositoryInstance {
-  if (!learningGoalRepository) {
-    throw new Error('Learning goal storage is not available.')
-  }
-
-  return learningGoalRepository
 }
 
 async function openPdfResource(resourceId: string): Promise<TabsSnapshot> {
@@ -795,10 +756,75 @@ function ragReference(resource: CapturedResource): RagResourceReference {
   }
 }
 
-async function buildPromptWithKnowledgeContext(userContent: string): Promise<string> {
+async function getProjectKnowledgeGapSummary(projectId: string, sessionNotes = ''): Promise<ProjectKnowledgeGapSummary | null> {
+  const project = await projectRepository?.getById(projectId)
+
+  if (!project || !projectRepository) {
+    return null
+  }
+
+  const resources = await projectRepository.getResourcesForProject(project.id)
+
+  return analyzeProjectKnowledgeGaps({
+    project,
+    resources,
+    sessionNotes
+  })
+}
+
+async function buildActiveProjectLearningContext(sessionNotes = ''): Promise<string | null> {
+  if (!activeProjectId || !projectRepository) {
+    return null
+  }
+
+  const project = await projectRepository.getById(activeProjectId)
+
+  if (!project) {
+    return null
+  }
+
+  const gapSummary = await getProjectKnowledgeGapSummary(project.id, sessionNotes)
+  const lines = [
+    `Title: ${project.title}`,
+    `Type: ${project.type}`,
+    project.description ? `Description: ${project.description}` : null,
+    project.notes ? `Project notes: ${truncateText(project.notes, 600)}` : null,
+    sessionNotes.trim() ? `Current session notes: ${truncateText(sessionNotes, 600)}` : null,
+    gapSummary && gapSummary.gaps.length > 0
+      ? [
+          'Detected knowledge gaps and recommendations:',
+          ...gapSummary.gaps.slice(0, 4).map((gap, index) => `${index + 1}. ${gap.title} - ${gap.recommendation}`)
+        ].join('\n')
+      : null
+  ].filter(Boolean)
+
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
+function truncateText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+
+  return `${normalized.slice(0, maxLength).trim()}...`
+}
+
+async function buildPromptWithKnowledgeContext(userContent: string, sessionNotes = ''): Promise<string> {
   sendMentorEvent({ type: 'context', status: 'searching', resources: [] })
 
-  const resources = await resourceRepository?.searchRelevant(userContent, 5) ?? []
+  const [knowledgeContext, activeProjectContext] = await Promise.all([
+    searchProjectAwareResources({
+      query: userContent,
+      activeProjectId,
+      resourceRepository,
+      projectRepository,
+      limit: 5
+    }),
+    buildActiveProjectLearningContext(sessionNotes)
+  ])
+  const { resources, projectMatchCount } = knowledgeContext
 
   sendMentorEvent({
     type: 'context',
@@ -806,13 +832,13 @@ async function buildPromptWithKnowledgeContext(userContent: string): Promise<str
     resources: resources.map(ragReference)
   })
 
-  if (resources.length === 0) {
+  if (resources.length === 0 && !activeProjectContext) {
     return userContent
   }
 
   const contextBlocks = resources.slice(0, 5).map((resource, index) =>
     [
-      `[${index + 1}] ${resource.title} (${resource.type}, ${resource.source})`,
+      `[${index + 1}] ${resource.title} (${resource.type}, ${resource.source}${index < projectMatchCount ? ', active project' : ', library'})`,
       resource.url ? `URL: ${resource.url}` : null,
       'Excerpt:',
       excerptForQuery(resource, userContent)
@@ -825,11 +851,18 @@ async function buildPromptWithKnowledgeContext(userContent: string): Promise<str
     'The learner asked this question in Improvement:',
     userContent,
     '',
-    'Relevant local knowledge base context retrieved with SQLite FTS5:',
-    contextBlocks.join('\n\n'),
+    activeProjectContext ? `Active project context:\n${activeProjectContext}` : null,
+    resources.length > 0
+      ? [
+          projectMatchCount > 0
+            ? 'Relevant local knowledge base context retrieved with SQLite FTS5. Active project resources are listed first, followed by broader library fallback when useful:'
+            : 'Relevant local knowledge base context retrieved with SQLite FTS5:',
+          contextBlocks.join('\n\n')
+        ].join('\n')
+      : null,
     '',
-    'Use the local context when it is relevant. Cite sources inline as [1], [2], etc. when possible. If the context does not answer the question, say what is missing and answer from general knowledge only where appropriate.'
-  ].join('\n')
+    'Use the project context and local resources when relevant. Cite sources inline as [1], [2], etc. when possible. If the context does not answer the question, say what is missing and answer from general knowledge only where appropriate.'
+  ].filter(Boolean).join('\n')
 }
 
 function buildCapturePrompt(capture: CapturedSelection): string {
@@ -885,7 +918,10 @@ function rememberConversationMessage(message: XaiChatMessage): void {
   }
 }
 
-async function streamMentorResponse(userContent: string, options: { useKnowledgeBase?: boolean } = {}): Promise<void> {
+async function streamMentorResponse(
+  userContent: string,
+  options: { useKnowledgeBase?: boolean; sessionNotes?: string } = {}
+): Promise<void> {
   const { apiKey } = getXaiApiKey()
 
   if (!apiKey) {
@@ -908,7 +944,9 @@ async function streamMentorResponse(userContent: string, options: { useKnowledge
   let assistantMessage: MentorMessage | null = null
 
   try {
-    const promptContent = options.useKnowledgeBase ? await buildPromptWithKnowledgeContext(userContent) : userContent
+    const promptContent = options.useKnowledgeBase
+      ? await buildPromptWithKnowledgeContext(userContent, options.sessionNotes)
+      : userContent
     rememberConversationMessage({ role: 'user', content: promptContent })
 
     assistantMessage = {
@@ -1042,7 +1080,6 @@ app.whenReady().then(async () => {
   configureBrowserSession()
   await initializeResourceRepository()
   await initializeProjectRepository()
-  await initializeLearningGoalRepository()
 
   ipcMain.handle(ipcChannels.createTab, (_event, url?: string) => createTab(url))
   ipcMain.handle(ipcChannels.closeTab, (_event, tabId: TabId) => closeTab(tabId))
@@ -1100,11 +1137,18 @@ app.whenReady().then(async () => {
         await resourceRepository.delete(resourceId)
       }
     }
+    if (activeProjectId === id) {
+      activeProjectId = null
+    }
     await projectRepo.delete(id)
   })
-  ipcMain.handle(ipcChannels.linkResourceToProject, async (_event, resourceId: string, projectId: string, learningGoalId?: string | null) => {
+  ipcMain.on(ipcChannels.setActiveProjectContext, (_event, projectId: string | null) => {
+    const trimmed = typeof projectId === 'string' ? projectId.trim() : ''
+    activeProjectId = trimmed.length > 0 ? trimmed : null
+  })
+  ipcMain.handle(ipcChannels.linkResourceToProject, async (_event, resourceId: string, projectId: string) => {
     const projects = ensureProjectRepository()
-    await projects.linkResourceToProject({ resourceId, projectId, learningGoalId })
+    await projects.linkResourceToProject({ resourceId, projectId })
     return projects.getLinksForResource(resourceId)
   })
   ipcMain.handle(ipcChannels.unlinkResourceFromProject, async (_event, resourceId: string, projectId: string) => {
@@ -1114,14 +1158,9 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle(ipcChannels.getResourceProjectLinks, async (_event, resourceId: string) => projectRepository?.getLinksForResource(resourceId) ?? [])
   ipcMain.handle(ipcChannels.getProjectResources, async (_event, projectId: string) => projectRepository?.getResourcesForProject(projectId) ?? [])
-  ipcMain.handle(ipcChannels.getLearningGoals, async (_event, projectId: string) => learningGoalRepository?.getByProjectId(projectId) ?? [])
-  ipcMain.handle(ipcChannels.createLearningGoal, async (_event, goal: LearningGoalInput) => ensureLearningGoalRepository().create(goal))
-  ipcMain.handle(ipcChannels.updateLearningGoal, async (_event, goal: LearningGoalUpdate) => ensureLearningGoalRepository().update(goal))
-  ipcMain.handle(ipcChannels.deleteLearningGoal, async (_event, id: string) => {
-    await ensureLearningGoalRepository().delete(id)
-  })
-  ipcMain.handle(ipcChannels.markLearningGoalComplete, async (_event, id: string) => ensureLearningGoalRepository().markComplete(id))
-  ipcMain.handle(ipcChannels.getProjectProgress, async (_event, projectId: string) => ensureLearningGoalRepository().getProjectProgress(projectId))
+  ipcMain.handle(ipcChannels.getProjectKnowledgeGaps, async (_event, projectId: string, sessionNotes = '') =>
+    getProjectKnowledgeGapSummary(projectId, typeof sessionNotes === 'string' ? sessionNotes : '')
+  )
   ipcMain.handle(ipcChannels.importPdfResource, () => importPdf())
   ipcMain.handle(ipcChannels.openPdfResource, (_event, id: string) => openPdfResource(id))
   ipcMain.handle(ipcChannels.setTemporaryXaiApiKey, (_event, apiKey: string) => {
@@ -1133,13 +1172,16 @@ app.whenReady().then(async () => {
   ipcMain.handle(ipcChannels.sendCaptureToMentor, async (_event, capture: CapturedSelection) => {
     await streamMentorResponse(buildCapturePrompt(capture))
   })
-  ipcMain.handle(ipcChannels.sendMentorMessage, async (_event, message: string) => {
+  ipcMain.handle(ipcChannels.sendMentorMessage, async (_event, message: string, sessionNotes = '') => {
     const trimmed = message.trim()
     if (trimmed.length === 0) {
       return
     }
 
-    await streamMentorResponse(trimmed, { useKnowledgeBase: true })
+    await streamMentorResponse(trimmed, {
+      useKnowledgeBase: true,
+      sessionNotes: typeof sessionNotes === 'string' ? sessionNotes : ''
+    })
   })
   ipcMain.on(ipcChannels.setBrowserBounds, (_event, bounds: BrowserBounds) => {
     lastBrowserBounds = bounds
@@ -1179,8 +1221,6 @@ app.whenReady().then(async () => {
     resourceRepository = null
     projectRepository?.close()
     projectRepository = null
-    learningGoalRepository?.close()
-    learningGoalRepository = null
   })
 
   app.on('activate', () => {

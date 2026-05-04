@@ -4,12 +4,13 @@ import type {
   CapturedSelection,
   MentorStreamEvent,
   RendererApi,
+  ResourceImportedEvent,
   TabId,
   TabsSnapshot,
   TranscriptCaptureEvent
 } from '../shared/ipc'
 import { ipcChannels } from '../shared/ipc'
-import type { LearningGoalInput, LearningGoalUpdate, ProjectInput, ProjectUpdate } from '../shared/projects'
+import type { ProjectInput, ProjectUpdate } from '../shared/projects'
 
 const api: RendererApi = {
   createTab: (url?: string) => ipcRenderer.invoke(ipcChannels.createTab, url),
@@ -29,25 +30,25 @@ const api: RendererApi = {
   createProject: (project: ProjectInput) => ipcRenderer.invoke(ipcChannels.createProject, project),
   updateProject: (project: ProjectUpdate) => ipcRenderer.invoke(ipcChannels.updateProject, project),
   deleteProject: (id: string, deleteAssociatedResources?: boolean) => ipcRenderer.invoke(ipcChannels.deleteProject, id, deleteAssociatedResources),
-  linkResourceToProject: (resourceId: string, projectId: string, learningGoalId?: string | null) =>
-    ipcRenderer.invoke(ipcChannels.linkResourceToProject, resourceId, projectId, learningGoalId),
+  setActiveProjectContext: (projectId: string | null) => {
+    ipcRenderer.send(ipcChannels.setActiveProjectContext, projectId)
+  },
+  linkResourceToProject: (resourceId: string, projectId: string) =>
+    ipcRenderer.invoke(ipcChannels.linkResourceToProject, resourceId, projectId),
   unlinkResourceFromProject: (resourceId: string, projectId: string) =>
     ipcRenderer.invoke(ipcChannels.unlinkResourceFromProject, resourceId, projectId),
   getResourceProjectLinks: (resourceId: string) => ipcRenderer.invoke(ipcChannels.getResourceProjectLinks, resourceId),
   getProjectResources: (projectId: string) => ipcRenderer.invoke(ipcChannels.getProjectResources, projectId),
-  getLearningGoals: (projectId: string) => ipcRenderer.invoke(ipcChannels.getLearningGoals, projectId),
-  createLearningGoal: (goal: LearningGoalInput) => ipcRenderer.invoke(ipcChannels.createLearningGoal, goal),
-  updateLearningGoal: (goal: LearningGoalUpdate) => ipcRenderer.invoke(ipcChannels.updateLearningGoal, goal),
-  deleteLearningGoal: (id: string) => ipcRenderer.invoke(ipcChannels.deleteLearningGoal, id),
-  markLearningGoalComplete: (id: string) => ipcRenderer.invoke(ipcChannels.markLearningGoalComplete, id),
-  getProjectProgress: (projectId: string) => ipcRenderer.invoke(ipcChannels.getProjectProgress, projectId),
+  getProjectKnowledgeGaps: (projectId: string, sessionNotes?: string) =>
+    ipcRenderer.invoke(ipcChannels.getProjectKnowledgeGaps, projectId, sessionNotes),
   importPdfResource: () => ipcRenderer.invoke(ipcChannels.importPdfResource),
   openPdfResource: (id: string) => ipcRenderer.invoke(ipcChannels.openPdfResource, id),
   getXaiStatus: () => ipcRenderer.invoke(ipcChannels.getXaiStatus),
   setTemporaryXaiApiKey: (apiKey: string) => ipcRenderer.invoke(ipcChannels.setTemporaryXaiApiKey, apiKey),
   captureTranscript: () => ipcRenderer.invoke(ipcChannels.captureTranscript),
   sendCaptureToMentor: (capture: CapturedSelection) => ipcRenderer.invoke(ipcChannels.sendCaptureToMentor, capture),
-  sendMentorMessage: (message: string) => ipcRenderer.invoke(ipcChannels.sendMentorMessage, message),
+  sendMentorMessage: (message: string, sessionNotes?: string) =>
+    ipcRenderer.invoke(ipcChannels.sendMentorMessage, message, sessionNotes),
   onTabsChanged: (callback: (snapshot: TabsSnapshot) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, snapshot: TabsSnapshot) => callback(snapshot)
     ipcRenderer.on(ipcChannels.tabsChanged, listener)
@@ -67,6 +68,11 @@ const api: RendererApi = {
     const listener = (_event: Electron.IpcRendererEvent, streamEvent: MentorStreamEvent) => callback(streamEvent)
     ipcRenderer.on(ipcChannels.mentorStream, listener)
     return () => ipcRenderer.removeListener(ipcChannels.mentorStream, listener)
+  },
+  onResourceImported: (callback: (event: ResourceImportedEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, resourceEvent: ResourceImportedEvent) => callback(resourceEvent)
+    ipcRenderer.on(ipcChannels.resourceImported, listener)
+    return () => ipcRenderer.removeListener(ipcChannels.resourceImported, listener)
   }
 }
 

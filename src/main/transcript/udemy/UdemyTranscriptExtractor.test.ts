@@ -23,7 +23,29 @@ describe('UdemyTranscriptExtractor', () => {
 
     expect(script).toContain('Please open the Transcript panel in the Udemy video player first')
     expect(script).toContain('[data-purpose*="transcript-panel" i]')
+    expect(script).toContain('getSectionTitle')
+    expect(script).toContain('getLectureTitle')
+    expect(script).toContain('getLectureId')
+    expect(script).toContain('findLectureElementById')
+    expect(script).toContain('[data-purpose*="section-title" i]')
+    expect(script).toContain('[data-purpose*="lecture-title" i]')
+    expect(script).toContain('[data-purpose="curriculum-item-title"]')
+    expect(script).toContain('[class*="curriculum-item-link--curriculum-item-title" i]')
+    expect(script).toContain('sectionTitle + " - " + lectureTitle')
     expect(script).toContain('window.location.href')
     expect(script).toContain('Udemy course')
+  })
+
+  it('uses the extracted section and lecture title as the resource name', () => {
+    const resource = extractor.createResource({
+      ok: true,
+      title: 'Chassis Setup - Brake Bias Explained',
+      url: 'https://www.udemy.com/course/race-car-setup/learn/lecture/123456',
+      text: 'Transcript text about brake bias.'
+    })
+
+    expect(resource?.title).toBe('Chassis Setup - Brake Bias Explained')
+    expect(resource?.metadata.providerLabel).toBe('Udemy')
+    expect(resource?.tags).toContain('udemy')
   })
 })
